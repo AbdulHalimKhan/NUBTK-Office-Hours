@@ -30,7 +30,7 @@ abstract class AttendanceDatabase : RoomDatabase() {
                     context.applicationContext,
                     AttendanceDatabase::class.java,
                     "nubtk_office_hours_db"
-                ).fallbackToDestructiveMigration().build()
+                ).fallbackToDestructiveMigration(dropAllTables = true).build()
                 INSTANCE = instance
                 instance
             }

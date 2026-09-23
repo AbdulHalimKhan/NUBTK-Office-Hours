@@ -9,8 +9,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Login
-import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.Login
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -35,7 +35,7 @@ fun PunchButton(
     enabled: Boolean = true
 ) {
     val containerColor = if (isPunchIn) PrimaryLimeGreen else DarkGreen
-    val icon: ImageVector = if (isPunchIn) Icons.Default.Login else Icons.Default.Logout
+    val icon: ImageVector = if (isPunchIn) Icons.AutoMirrored.Filled.Login else Icons.AutoMirrored.Filled.Logout
     val text = if (isPunchIn) "PUNCH IN" else "PUNCH OUT"
     val tag = if (isPunchIn) "punch_in_button" else "punch_out_button"
 
