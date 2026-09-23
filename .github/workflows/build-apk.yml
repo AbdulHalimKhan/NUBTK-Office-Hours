@@ -1,0 +1,76 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Setup Environment
+        run: |
+          cp .env.example .env || touch .env
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Rename APK for Delivery
+        run: |
+          mkdir -p build-artifacts
+          cp app/build/outputs/apk/debug/app-debug.apk build-artifacts/NUBTK-Office-Hours-v1.0.0.apk
+          cp app/build/outputs/apk/debug/app-debug.apk build-artifacts/app-debug.apk
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NUBTK-Office-Hours-APK
+          path: build-artifacts/*.apk
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: NUBTK Office Hours ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          files: |
+            build-artifacts/NUBTK-Office-Hours-v1.0.0.apk
+          body: |
+            ## NUBTK Office Hours Release ${{ github.ref_name }}
+            
+            **Track Your Time. Know Your Progress.**
+            
+            ### Included in this release:
+            - Complete NUBTK Office Hours attendance management APK
+            - Punch In / Out with timestamp recording and duration calculation
+            - Configurable attendance periods (with Bangladesh public holidays support)
+            - Real-time delay calculation with dynamic **Extra** (Green) and **Delay** (Red) tracking
+            - User Profile attachment in downloadable PDF attendance reports
+            - Full offline persistence powered by Room Database
+            
+            **Developer:** Md. Abdul Halim Khan (Lecturer, CSE, Northern University of Business and Technology, Khulna)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

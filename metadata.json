@@ -1,0 +1,6 @@
+{
+  "name": "NUBTK Office Hours",
+  "description": "Personal attendance, working hours, and leave records tracking for faculty and staff.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
