@@ -19,6 +19,10 @@ object NotificationHelper {
     private const val ALARM_REQUEST_CODE = 2001
     const val ACTION_WORK_HOURS_COMPLETED = "com.example.ACTION_WORK_HOURS_COMPLETED"
 
+    private const val PREFS_NAME = "nubtk_notification_prefs"
+    private const val KEY_NOTIFICATIONS_ENABLED = "notifications_enabled"
+    private const val KEY_LAST_NOTIFIED_SESSION = "last_notified_session"
+
     fun initNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -33,6 +37,73 @@ object NotificationHelper {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
         }
+    }
+
+    fun isNotificationEnabled(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getBoolean(KEY_NOTIFICATIONS_ENABLED, true)
+    }
+
+    fun setNotificationEnabled(context: Context, enabled: Boolean) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(KEY_NOTIFICATIONS_ENABLED, enabled).apply()
+        if (!enabled) {
+            cancelWorkHoursAlarm(context)
+        }
+    }
+
+    fun hasNotifiedForSession(context: Context, sessionKey: String): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_LAST_NOTIFIED_SESSION, null) == sessionKey
+    }
+
+    fun markNotifiedForSession(context: Context, sessionKey: String) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_LAST_NOTIFIED_SESSION, sessionKey).apply()
+    }
+
+    /**
+     * Resets the notification state so a new target schedule or new punch session can notify.
+     */
+    fun resetNotificationTriggeredState(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().remove(KEY_LAST_NOTIFIED_SESSION).apply()
+    }
+
+    /**
+     * Attempts to trigger the Office Hours countdown completion notification.
+     * Enforces strict single-trigger semantics:
+     * 1. Checks user ON/OFF preference.
+     * 2. Checks system notification permission.
+     * 3. Checks persistent session key (date + punchInTimestamp + dailyMinutes).
+     * Returns true if notification was posted, false if suppressed or disabled.
+     */
+    fun maybeNotifyWorkHoursCompleted(
+        context: Context,
+        dateIso: String,
+        punchInTimestamp: Long,
+        targetHours: Int,
+        targetMinutes: Int
+    ): Boolean {
+        if (!isNotificationEnabled(context)) {
+            return false
+        }
+
+        val notificationManager = NotificationManagerCompat.from(context)
+        if (!notificationManager.areNotificationsEnabled()) {
+            return false
+        }
+
+        val totalMins = (targetHours * 60) + targetMinutes
+        val sessionKey = "${dateIso}_${punchInTimestamp}_${totalMins}"
+
+        if (hasNotifiedForSession(context, sessionKey)) {
+            return false
+        }
+
+        showWorkHoursCompletedNotification(context, targetHours, targetMinutes)
+        markNotifiedForSession(context, sessionKey)
+        return true
     }
 
     fun showWorkHoursCompletedNotification(context: Context, targetHours: Int, targetMinutes: Int) {
@@ -74,6 +145,8 @@ object NotificationHelper {
     }
 
     fun scheduleWorkHoursAlarm(context: Context, punchInTimestamp: Long, dailyWorkingMinutes: Int) {
+        if (!isNotificationEnabled(context)) return
+
         val triggerAtMillis = punchInTimestamp + (dailyWorkingMinutes * 60 * 1000L)
         if (triggerAtMillis <= System.currentTimeMillis()) return
 
@@ -81,6 +154,7 @@ object NotificationHelper {
         val intent = Intent(context, WorkHoursAlarmReceiver::class.java).apply {
             action = ACTION_WORK_HOURS_COMPLETED
             putExtra("dailyWorkingMinutes", dailyWorkingMinutes)
+            putExtra("punchInTimestamp", punchInTimestamp)
         }
         val pendingIntent = PendingIntent.getBroadcast(
             context,
@@ -104,7 +178,6 @@ object NotificationHelper {
                 )
             }
         } catch (_: SecurityException) {
-            // Exact alarm permission fallback
             alarmManager.set(
                 AlarmManager.RTC_WAKEUP,
                 triggerAtMillis,

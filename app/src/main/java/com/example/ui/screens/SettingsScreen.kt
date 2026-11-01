@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Celebration
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Weekend
@@ -86,6 +87,7 @@ fun SettingsScreen(
     val activePeriod by viewModel.activePeriod.collectAsStateWithLifecycle()
     val activeWeekends by viewModel.activePeriodWeekends.collectAsStateWithLifecycle()
     val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
+    val notificationsEnabled by viewModel.notificationsEnabled.collectAsStateWithLifecycle()
 
     var profileName by remember(userProfile) { mutableStateOf(userProfile?.name ?: "") }
     var profileDesignation by remember(userProfile) { mutableStateOf(userProfile?.designation ?: "") }
@@ -250,7 +252,8 @@ fun SettingsScreen(
                                 name = profileName,
                                 designation = profileDesignation,
                                 department = profileDepartment,
-                                employeeId = profileEmployeeId
+                                employeeId = profileEmployeeId,
+                                onComplete = onNavigateBack
                             )
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = DarkGreen),
@@ -262,8 +265,69 @@ fun SettingsScreen(
                     ) {
                         Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("SAVE EMPLOYEE PROFILE", fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
+                        Text("SAVE & RETURN TO HOME", fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
                     }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Notification Settings Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("notification_settings_card"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = null,
+                                tint = DarkGreen,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Column {
+                                Text(
+                                    text = "OFFICE HOURS NOTIFICATION",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = DarkGreen,
+                                    letterSpacing = 1.sp
+                                )
+                                Text(
+                                    text = if (notificationsEnabled) "Notifications are ON" else "Notifications are OFF",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = notificationsEnabled,
+                            onCheckedChange = { viewModel.setNotificationsEnabled(it) },
+                            modifier = Modifier.testTag("notification_toggle_switch")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "When turned ON, the app sends an alert once when your daily working countdown reaches the target office hours. When turned OFF, notifications are completely prevented without affecting timer countdown or widget features.",
+                        fontSize = 11.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 15.sp
+                    )
                 }
             }
 
@@ -522,11 +586,11 @@ fun SettingsScreen(
         ConfirmationDialog(
             title = "Update Active Period?",
             message = "Changing active period dates or daily working hours will re-calculate expected hours and delays for the period. Do you want to proceed?",
-            confirmButtonText = "Update",
+            confirmButtonText = "Update & Return",
             onConfirm = {
                 val h = dailyHours.toIntOrNull() ?: 8
                 val m = dailyMinutes.toIntOrNull() ?: 0
-                viewModel.updateActivePeriod(periodName, startDate, endDate, h, m)
+                viewModel.updateActivePeriod(periodName, startDate, endDate, h, m, onComplete = onNavigateBack)
                 showEditConfirmDialog = false
             },
             onDismiss = { showEditConfirmDialog = false }
@@ -537,7 +601,7 @@ fun SettingsScreen(
         CreatePeriodDialog(
             onDismiss = { showCreatePeriodDialog = false },
             onConfirm = { name, s, e, h, m, weekends, includeBds ->
-                viewModel.createNewPeriod(name, s, e, h, m, weekends, includeBds)
+                viewModel.createNewPeriod(name, s, e, h, m, weekends, includeBds, onComplete = onNavigateBack)
                 showCreatePeriodDialog = false
             }
         )

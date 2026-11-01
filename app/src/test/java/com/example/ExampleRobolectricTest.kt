@@ -106,4 +106,49 @@ class ExampleRobolectricTest {
         assertEquals(DayClassification.HOLIDAY, dayInfo.baseClassification)
         assertEquals("Victory Day", dayInfo.statusDetail)
     }
+
+    @Test
+    fun `test notification setting persistence and single trigger semantics`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+
+        // Default should be true
+        assertTrue(com.example.notifications.NotificationHelper.isNotificationEnabled(context))
+
+        // Set to false and verify persistence
+        com.example.notifications.NotificationHelper.setNotificationEnabled(context, false)
+        assertEquals(false, com.example.notifications.NotificationHelper.isNotificationEnabled(context))
+
+        // When notifications are OFF, maybeNotifyWorkHoursCompleted should immediately return false
+        val suppressed = com.example.notifications.NotificationHelper.maybeNotifyWorkHoursCompleted(
+            context = context,
+            dateIso = "2026-10-15",
+            punchInTimestamp = 1000000L,
+            targetHours = 8,
+            targetMinutes = 0
+        )
+        assertEquals(false, suppressed)
+
+        // Turn notifications back ON
+        com.example.notifications.NotificationHelper.setNotificationEnabled(context, true)
+        assertEquals(true, com.example.notifications.NotificationHelper.isNotificationEnabled(context))
+
+        // Reset session state
+        com.example.notifications.NotificationHelper.resetNotificationTriggeredState(context)
+        val sessionKey = "2026-10-15_1000000_480"
+        assertEquals(false, com.example.notifications.NotificationHelper.hasNotifiedForSession(context, sessionKey))
+
+        // Mark notified
+        com.example.notifications.NotificationHelper.markNotifiedForSession(context, sessionKey)
+        assertEquals(true, com.example.notifications.NotificationHelper.hasNotifiedForSession(context, sessionKey))
+
+        // A second trigger attempt for the same session should be suppressed
+        val secondAttempt = com.example.notifications.NotificationHelper.maybeNotifyWorkHoursCompleted(
+            context = context,
+            dateIso = "2026-10-15",
+            punchInTimestamp = 1000000L,
+            targetHours = 8,
+            targetMinutes = 0
+        )
+        assertEquals(false, secondAttempt)
+    }
 }

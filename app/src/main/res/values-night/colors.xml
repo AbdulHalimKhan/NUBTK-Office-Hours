@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Widget Dark Mode Colors -->
+    <color name="widget_background">#141E15</color>
+    <color name="widget_stroke">#2E4730</color>
+    <color name="widget_title">#AEEA00</color>
+    <color name="widget_date">#B0BEC5</color>
+    <color name="widget_pill_bg">#1E3120</color>
+    <color name="widget_pill_stroke">#3E6841</color>
+    <color name="widget_pill_text">#C8E6C9</color>
+    <color name="widget_timer_text">#FFFFFF</color>
+    <color name="widget_sub_text">#A0B2A6</color>
+    <color name="widget_special_day_title">#FFFFFF</color>
+    <color name="widget_special_day_desc">#C8E6C9</color>
+    <color name="widget_offday_text">#C8E6C9</color>
+    <color name="widget_refresh_tint">#AEEA00</color>
+    <color name="widget_button_punch_in">#388E3C</color>
+    <color name="widget_button_punch_out">#E53935</color>
+    <color name="widget_button_text">#FFFFFF</color>
+</resources>

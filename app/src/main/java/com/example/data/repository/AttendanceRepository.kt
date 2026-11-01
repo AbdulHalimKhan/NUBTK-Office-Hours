@@ -1,5 +1,6 @@
 package com.example.data.repository
 
+import android.content.Context
 import com.example.data.local.AttendanceDao
 import com.example.data.local.AttendancePeriodEntity
 import com.example.data.local.AttendanceRecordEntity
@@ -11,7 +12,12 @@ import com.example.utils.DateTimeUtils
 import kotlinx.coroutines.flow.Flow
 import java.time.DayOfWeek
 
-class AttendanceRepository(private val dao: AttendanceDao) {
+class AttendanceRepository(
+    private val dao: AttendanceDao,
+    private val context: Context? = null
+) {
+
+    private val prefs = context?.getSharedPreferences("nubtk_employee_profile_prefs", Context.MODE_PRIVATE)
 
     val allPeriods: Flow<List<AttendancePeriodEntity>> = dao.getAllPeriods()
     val activePeriodFlow: Flow<AttendancePeriodEntity?> = dao.getActivePeriodFlow()
@@ -117,18 +123,53 @@ class AttendanceRepository(private val dao: AttendanceDao) {
     // User Profile
     val userProfileFlow: Flow<UserProfileEntity?> = dao.getUserProfileFlow()
 
-    suspend fun getUserProfile(): UserProfileEntity? = dao.getUserProfile()
+    suspend fun getUserProfile(): UserProfileEntity? {
+        val profile = dao.getUserProfile()
+        if (profile != null && (profile.name.isNotBlank() || profile.designation.isNotBlank() || profile.department.isNotBlank() || profile.employeeId.isNotBlank())) {
+            return profile
+        }
+        return getProfileFromPrefs() ?: profile
+    }
+
+    private fun getProfileFromPrefs(): UserProfileEntity? {
+        val p = prefs ?: return null
+        val name = p.getString("name", "") ?: ""
+        val desig = p.getString("designation", "") ?: ""
+        val dept = p.getString("department", "") ?: ""
+        val empId = p.getString("employee_id", "") ?: ""
+        if (name.isBlank() && desig.isBlank() && dept.isBlank() && empId.isBlank()) {
+            return null
+        }
+        return UserProfileEntity(id = 1, name = name, designation = desig, department = dept, employeeId = empId)
+    }
+
+    private fun saveProfileToPrefs(entity: UserProfileEntity) {
+        prefs?.edit()?.apply {
+            putString("name", entity.name)
+            putString("designation", entity.designation)
+            putString("department", entity.department)
+            putString("employee_id", entity.employeeId)
+            apply()
+        }
+    }
 
     suspend fun saveUserProfile(name: String, designation: String, department: String, employeeId: String) {
-        dao.saveUserProfile(
-            UserProfileEntity(
-                id = 1,
-                name = name.trim(),
-                designation = designation.trim(),
-                department = department.trim(),
-                employeeId = employeeId.trim()
-            )
+        val existing = dao.getUserProfile() ?: getProfileFromPrefs()
+        // Do not replace valid existing information with blank strings if non-empty already exists
+        val finalName = name.trim().ifEmpty { existing?.name ?: "" }
+        val finalDesignation = designation.trim().ifEmpty { existing?.designation ?: "" }
+        val finalDepartment = department.trim().ifEmpty { existing?.department ?: "" }
+        val finalEmployeeId = employeeId.trim().ifEmpty { existing?.employeeId ?: "" }
+
+        val entity = UserProfileEntity(
+            id = 1,
+            name = finalName,
+            designation = finalDesignation,
+            department = finalDepartment,
+            employeeId = finalEmployeeId
         )
+        dao.saveUserProfile(entity)
+        saveProfileToPrefs(entity)
     }
 
     /**
@@ -224,18 +265,13 @@ class AttendanceRepository(private val dao: AttendanceDao) {
             )
         }
 
-        // User profile starts completely blank upon installation; user inputs their own details
+        // Restore user profile from backup if Room is empty, never blank out valid profile
         val profile = dao.getUserProfile()
-        if (profile != null && profile.name == "Md. Abdul Halim Khan" && profile.designation == "Lecturer") {
-            dao.saveUserProfile(
-                UserProfileEntity(
-                    id = 1,
-                    name = "",
-                    designation = "",
-                    department = "",
-                    employeeId = ""
-                )
-            )
+        if (profile == null || (profile.name.isBlank() && profile.designation.isBlank() && profile.department.isBlank() && profile.employeeId.isBlank())) {
+            val backup = getProfileFromPrefs()
+            if (backup != null && (backup.name.isNotBlank() || backup.designation.isNotBlank() || backup.department.isNotBlank() || backup.employeeId.isNotBlank())) {
+                dao.saveUserProfile(backup)
+            }
         }
     }
 }

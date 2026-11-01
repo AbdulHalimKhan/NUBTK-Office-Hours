@@ -479,14 +479,19 @@ fun HomeScreen(
                 val remainingMillis = targetDurationMillis - elapsedMillis
                 val isTargetMet = isPunchedInActive && remainingMillis <= 0L
 
-                // Trigger notification when work hours meet the daily target
-                LaunchedEffect(isTargetMet) {
-                    val todayIso = DateTimeUtils.todayIso()
-                    if (isTargetMet && notifiedTargetMetForDate != todayIso) {
-                        notifiedTargetMetForDate = todayIso
+                // Trigger notification when work hours meet the daily target (enforces single-trigger via persistent session key)
+                LaunchedEffect(isTargetMet, inTimestamp) {
+                    if (isTargetMet && isPunchedInActive) {
+                        val todayIso = DateTimeUtils.todayIso()
                         val hrs = dailyWorkingMins / 60
                         val mins = dailyWorkingMins % 60
-                        NotificationHelper.showWorkHoursCompletedNotification(context, hrs, mins)
+                        NotificationHelper.maybeNotifyWorkHoursCompleted(
+                            context = context,
+                            dateIso = todayIso,
+                            punchInTimestamp = inTimestamp,
+                            targetHours = hrs,
+                            targetMinutes = mins
+                        )
                     }
                 }
 

@@ -7,4 +7,22 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- Widget Light Mode Colors -->
+    <color name="widget_background">#F7FAF7</color>
+    <color name="widget_stroke">#BDD4C0</color>
+    <color name="widget_title">#1B5E20</color>
+    <color name="widget_date">#455A64</color>
+    <color name="widget_pill_bg">#E8F5E9</color>
+    <color name="widget_pill_stroke">#A5D6A7</color>
+    <color name="widget_pill_text">#1B5E20</color>
+    <color name="widget_timer_text">#1B3B1E</color>
+    <color name="widget_sub_text">#4A634E</color>
+    <color name="widget_special_day_title">#1B3B1E</color>
+    <color name="widget_special_day_desc">#2E7D32</color>
+    <color name="widget_offday_text">#1B5E20</color>
+    <color name="widget_refresh_tint">#2E7D32</color>
+    <color name="widget_button_punch_in">#2E7D32</color>
+    <color name="widget_button_punch_out">#C62828</color>
+    <color name="widget_button_text">#FFFFFF</color>
 </resources>

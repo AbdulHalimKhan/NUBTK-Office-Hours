@@ -7,7 +7,7 @@
     android:background="@drawable/widget_bg"
     android:padding="12dp">
 
-    <!-- Header Row -->
+    <!-- Header Row with App Title, Date, and Refresh Button / Progress Indicator -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -20,7 +20,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="NUBTK Timer"
-            android:textColor="#AEEA00"
+            android:textColor="@color/widget_title"
             android:textStyle="bold"
             android:textSize="12sp"
             android:letterSpacing="0.05" />
@@ -30,8 +30,32 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Today"
-            android:textColor="#B0BEC5"
-            android:textSize="11sp" />
+            android:textColor="@color/widget_date"
+            android:textSize="11sp"
+            android:layout_marginEnd="6dp" />
+
+        <FrameLayout
+            android:id="@+id/widget_refresh_container"
+            android:layout_width="28dp"
+            android:layout_height="28dp">
+
+            <ImageButton
+                android:id="@+id/btn_widget_refresh"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_widget_refresh"
+                android:contentDescription="Refresh Widget"
+                android:scaleType="centerInside" />
+
+            <ProgressBar
+                android:id="@+id/widget_refresh_progress"
+                style="?android:attr/progressBarStyleSmall"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:visibility="gone" />
+        </FrameLayout>
     </LinearLayout>
 
     <!-- Center Section -->
@@ -52,7 +76,7 @@
             android:paddingHorizontal="10dp"
             android:paddingVertical="2dp"
             android:text="WORKING DAY"
-            android:textColor="#C8E6C9"
+            android:textColor="@color/widget_pill_text"
             android:textSize="10sp"
             android:textStyle="bold" />
 
@@ -70,7 +94,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="08:00:00"
-                android:textColor="#FFFFFF"
+                android:textColor="@color/widget_timer_text"
                 android:textSize="22sp"
                 android:textStyle="bold"
                 android:fontFamily="monospace"
@@ -81,7 +105,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Daily Target: 8h 00m"
-                android:textColor="#A0B2A6"
+                android:textColor="@color/widget_sub_text"
                 android:textSize="10sp" />
         </LinearLayout>
 
@@ -101,7 +125,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Official Holiday"
-                android:textColor="#FFFFFF"
+                android:textColor="@color/widget_special_day_title"
                 android:textSize="15sp"
                 android:textStyle="bold"
                 android:gravity="center"
@@ -112,7 +136,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Office Closed"
-                android:textColor="#C8E6C9"
+                android:textColor="@color/widget_special_day_desc"
                 android:textSize="11sp"
                 android:gravity="center"
                 android:maxLines="2"
@@ -128,7 +152,7 @@
         android:layout_height="36dp"
         android:gravity="center"
         android:text="Today is your off day"
-        android:textColor="#C8E6C9"
+        android:textColor="@color/widget_offday_text"
         android:textSize="12sp"
         android:textStyle="bold"
         android:background="@drawable/widget_pill_status"
@@ -151,7 +175,7 @@
             android:layout_marginEnd="4dp"
             android:background="@drawable/widget_btn_punch_in"
             android:text="Punch In"
-            android:textColor="#FFFFFF"
+            android:textColor="@color/widget_button_text"
             android:textSize="11sp"
             android:textStyle="bold" />
 
@@ -163,7 +187,7 @@
             android:layout_marginStart="4dp"
             android:background="@drawable/widget_btn_punch_out"
             android:text="Punch Out"
-            android:textColor="#FFFFFF"
+            android:textColor="@color/widget_button_text"
             android:textSize="11sp"
             android:textStyle="bold" />
     </LinearLayout>

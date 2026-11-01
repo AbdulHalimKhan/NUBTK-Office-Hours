@@ -14,46 +14,73 @@ android {
     applicationId = "com.aistudio.nubtkofficehours.qvnf"
     minSdk = 24
     targetSdk = 36
-    versionCode = 3
-    versionName = "1.2"
+    versionCode = 4
+    versionName = "1.3"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
- signingConfigs {
+  signingConfigs {
     create("release") {
-        val keystorePath = System.getenv("KEYSTORE_PATH")
-            ?: throw GradleException("KEYSTORE_PATH is missing")
+      val isReleaseRequested = gradle.startParameter.taskNames.any {
+        it.contains("Release", ignoreCase = true)
+      }
+      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/release-keystore.jks"
+      val storePassword = System.getenv("STORE_PASSWORD")
+      val keyPassword = System.getenv("KEY_PASSWORD")
 
-        val keystoreFile = file(keystorePath)
-
-        if (!keystoreFile.exists()) {
-            throw GradleException("Release keystore file not found")
+      if (isReleaseRequested) {
+        if (System.getenv("KEYSTORE_PATH").isNullOrBlank() && !file(keystorePath).exists()) {
+          throw GradleException("Mandatory release signing error: KEYSTORE_PATH environment variable is missing and default keystore does not exist at '$keystorePath'.")
         }
-
+        val keystoreFile = file(keystorePath)
+        if (!keystoreFile.exists()) {
+          throw GradleException("Mandatory release signing error: Keystore file does not exist at '$keystorePath'.")
+        }
+        if (storePassword.isNullOrBlank()) {
+          throw GradleException("Mandatory release signing error: STORE_PASSWORD environment variable is missing.")
+        }
+        if (keyPassword.isNullOrBlank()) {
+          throw GradleException("Mandatory release signing error: KEY_PASSWORD environment variable is missing.")
+        }
         storeFile = keystoreFile
-        storePassword = System.getenv("STORE_PASSWORD")
-            ?: throw GradleException("STORE_PASSWORD is missing")
+        this.storePassword = storePassword
         keyAlias = "upload"
-        keyPassword = System.getenv("KEY_PASSWORD")
-            ?: throw GradleException("KEY_PASSWORD is missing")
+        this.keyPassword = keyPassword
+      } else {
+        val keystoreFile = file(keystorePath)
+        if (keystoreFile.exists() && !storePassword.isNullOrBlank() && !keyPassword.isNullOrBlank()) {
+          storeFile = keystoreFile
+          this.storePassword = storePassword
+          keyAlias = "upload"
+          this.keyPassword = keyPassword
+        }
+      }
     }
-}
+    val debugKeystoreFile = file("${rootDir}/debug.keystore")
+    if (debugKeystoreFile.exists()) {
+      create("debugConfig") {
+        storeFile = debugKeystoreFile
+        storePassword = "android"
+        keyAlias = "androiddebugkey"
+        keyPassword = "android"
+      }
+    }
+  }
 
-buildTypes {
+  buildTypes {
     release {
-        isCrunchPngs = false
-        isMinifyEnabled = false
-        proguardFiles(
-            getDefaultProguardFile("proguard-android-optimize.txt"),
-            "proguard-rules.pro"
-        )
-        signingConfig = signingConfigs.getByName("release")
+      isCrunchPngs = false
+      isMinifyEnabled = false
+      proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+      signingConfig = signingConfigs.getByName("release")
     }
-
     debug {
+      if (signingConfigs.findByName("debugConfig") != null) {
+        signingConfig = signingConfigs.getByName("debugConfig")
+      }
     }
-}
+  }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11

@@ -56,10 +56,28 @@ class OfficeHoursViewModel(
     val userProfile: StateFlow<UserProfileEntity?> = repository.userProfileFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    fun saveUserProfile(name: String, designation: String, department: String, employeeId: String) {
+    private val _notificationsEnabled = MutableStateFlow(NotificationHelper.isNotificationEnabled(application))
+    val notificationsEnabled: StateFlow<Boolean> = _notificationsEnabled.asStateFlow()
+
+    fun setNotificationsEnabled(enabled: Boolean) {
+        NotificationHelper.setNotificationEnabled(getApplication(), enabled)
+        _notificationsEnabled.value = enabled
+        viewModelScope.launch {
+            _messageEvent.emit(if (enabled) "Office hours notifications enabled." else "Office hours notifications disabled.")
+        }
+    }
+
+    fun saveUserProfile(
+        name: String,
+        designation: String,
+        department: String,
+        employeeId: String,
+        onComplete: (() -> Unit)? = null
+    ) {
         viewModelScope.launch {
             repository.saveUserProfile(name, designation, department, employeeId)
             _messageEvent.emit("Employee profile saved successfully.")
+            onComplete?.invoke()
         }
     }
 
@@ -302,7 +320,8 @@ class OfficeHoursViewModel(
         dailyHours: Int,
         dailyMinutes: Int,
         weekendDays: Set<Int>,
-        includeBangladeshHolidays: Boolean = true
+        includeBangladeshHolidays: Boolean = true,
+        onComplete: (() -> Unit)? = null
     ) {
         viewModelScope.launch {
             val totalMinutes = (dailyHours * 60) + dailyMinutes
@@ -335,8 +354,10 @@ class OfficeHoursViewModel(
             if (includeBangladeshHolidays) {
                 repository.importBangladeshHolidaysForPeriod(newId, startDate, endDate)
             }
+            NotificationHelper.resetNotificationTriggeredState(getApplication())
 
             _messageEvent.emit("New attendance period created successfully.")
+            onComplete?.invoke()
         }
     }
 
@@ -345,7 +366,8 @@ class OfficeHoursViewModel(
         startDate: String,
         endDate: String,
         dailyHours: Int,
-        dailyMinutes: Int
+        dailyMinutes: Int,
+        onComplete: (() -> Unit)? = null
     ) {
         viewModelScope.launch {
             val current = activePeriod.value ?: return@launch
@@ -368,7 +390,10 @@ class OfficeHoursViewModel(
                 dailyWorkingMinutes = totalMinutes
             )
             repository.updatePeriod(updated)
+            // Reset notification session when target daily working hours or dates change
+            NotificationHelper.resetNotificationTriggeredState(getApplication())
             _messageEvent.emit("Attendance period settings updated.")
+            onComplete?.invoke()
         }
     }
 
@@ -562,7 +587,7 @@ class OfficeHoursViewModel(
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             val db = AttendanceDatabase.getDatabase(application)
-            val repo = AttendanceRepository(db.attendanceDao())
+            val repo = AttendanceRepository(db.attendanceDao(), application)
             return OfficeHoursViewModel(application, repo) as T
         }
     }

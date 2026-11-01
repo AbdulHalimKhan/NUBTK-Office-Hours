@@ -18,7 +18,7 @@ class WorkHoursAlarmReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val db = AttendanceDatabase.getDatabase(context)
-                val repository = AttendanceRepository(db.attendanceDao())
+                val repository = AttendanceRepository(db.attendanceDao(), context)
                 val activePeriod = repository.getActivePeriod()
                 if (activePeriod != null) {
                     val todayIso = DateTimeUtils.todayIso()
@@ -28,7 +28,13 @@ class WorkHoursAlarmReceiver : BroadcastReceiver() {
                         val expectedMins = activePeriod.dailyWorkingMinutes
                         val hours = expectedMins / 60
                         val mins = expectedMins % 60
-                        NotificationHelper.showWorkHoursCompletedNotification(context, hours, mins)
+                        NotificationHelper.maybeNotifyWorkHoursCompleted(
+                            context = context,
+                            dateIso = todayIso,
+                            punchInTimestamp = record.punchInTimestamp,
+                            targetHours = hours,
+                            targetMinutes = mins
+                        )
                     }
                 }
                 NubtkTimerWidgetProvider.updateAllWidgets(context)

@@ -1,5 +1,8 @@
 name: Build and Sign Android APK
 
+permissions:
+  contents: write
+
 on:
   push:
     branches:
@@ -8,9 +11,6 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
-
-permissions:
-  contents: write
 
 jobs:
   build:
@@ -24,33 +24,49 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
+          distribution: 'temurin'
           java-version: '17'
-          cache: gradle
+          cache: 'gradle'
 
-      - name: Grant execute permission
+      - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Prepare Environment
+      - name: Setup Environment
         run: |
           cp .env.example .env 2>/dev/null || touch .env
+          if [ -f "debug.keystore.base64" ]; then
+            base64 -d debug.keystore.base64 > debug.keystore 2>/dev/null || true
+          fi
 
-      - name: Decode Permanent Keystore
+      - name: Validate Secrets and Decode Permanent Keystore
+        id: decode_keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
+          echo "Validating mandatory signing secrets..."
           if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "ERROR: KEYSTORE_BASE64 is missing"
+            echo "::error::KEYSTORE_BASE64 secret is missing in GitHub Secrets!"
+            exit 1
+          fi
+          if [ -z "$STORE_PASSWORD" ]; then
+            echo "::error::STORE_PASSWORD secret is missing in GitHub Secrets!"
+            exit 1
+          fi
+          if [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::KEY_PASSWORD secret is missing in GitHub Secrets!"
             exit 1
           fi
 
-          echo "$KEYSTORE_BASE64" | base64 --decode \
-            > "${GITHUB_WORKSPACE}/release-keystore.jks"
+          echo "Decoding permanent release keystore from KEYSTORE_BASE64..."
+          echo "$KEYSTORE_BASE64" | base64 -d > "${GITHUB_WORKSPACE}/release-keystore.jks"
 
           if [ ! -s "${GITHUB_WORKSPACE}/release-keystore.jks" ]; then
-            echo "ERROR: Keystore decoding failed"
+            echo "::error::Decoded keystore file is missing or empty!"
             exit 1
           fi
+          echo "Keystore successfully decoded and verified non-empty."
 
       - name: Build Signed Release APK
         env:
@@ -58,34 +74,45 @@ jobs:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_PASSWORD" ]; then
-            echo "ERROR: Signing passwords are missing"
-            exit 1
-          fi
-
           ./gradlew assembleRelease --stacktrace
 
-      - name: Verify APK Signature
+      - name: Verify APK Signature and Prepare Artifact
         run: |
-          APK="app/build/outputs/apk/release/app-release.apk"
-
-          if [ ! -f "$APK" ]; then
-            echo "ERROR: Release APK not found"
+          if [ ! -f "app/build/outputs/apk/release/app-release.apk" ]; then
+            echo "::error::app-release.apk was not generated!"
             exit 1
           fi
-
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" \
-            -name apksigner | sort -V | tail -n 1)
-
-          if [ -z "$APKSIGNER" ]; then
-            echo "ERROR: apksigner not found"
-            exit 1
-          fi
-
-          "$APKSIGNER" verify --verbose "$APK"
 
           mkdir -p build-artifacts
-          cp "$APK" build-artifacts/NUBTK-Office-Hours-Signed-APK.apk
+          cp app/build/outputs/apk/release/app-release.apk build-artifacts/NUBTK-Office-Hours-Signed-APK.apk
+          cp app/build/outputs/apk/release/app-release.apk build-artifacts/app-release.apk
+
+          echo "=========================================="
+          echo "Release APK successfully created:"
+          ls -la build-artifacts/NUBTK-Office-Hours-Signed-APK.apk
+          echo "=========================================="
+
+          # Verify signature using apksigner
+          APKSIGNER=$(find $ANDROID_HOME/build-tools -name apksigner 2>/dev/null | sort -V | tail -n 1)
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::apksigner tool not found in Android SDK!"
+            exit 1
+          fi
+
+          echo "Verifying APK Signature with apksigner..."
+          $APKSIGNER verify --verbose build-artifacts/NUBTK-Office-Hours-Signed-APK.apk
+
+          # Verify package name / application ID using aapt
+          AAPT=$(find $ANDROID_HOME/build-tools -name aapt 2>/dev/null | sort -V | tail -n 1)
+          if [ -n "$AAPT" ]; then
+            echo "Checking Package & Version metadata..."
+            $AAPT dump badging build-artifacts/NUBTK-Office-Hours-Signed-APK.apk | grep -E "package: name=|versionCode=|versionName=" || true
+          fi
+
+      - name: Cleanup Keystore
+        if: always()
+        run: |
+          rm -f "${GITHUB_WORKSPACE}/release-keystore.jks"
 
       - name: Upload Signed APK Artifact
         uses: actions/upload-artifact@v4
@@ -99,16 +126,25 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: NUBTK Office Hours ${{ github.ref_name }}
-          files: build-artifacts/NUBTK-Office-Hours-Signed-APK.apk
+          draft: false
+          prerelease: false
+          files: |
+            build-artifacts/NUBTK-Office-Hours-Signed-APK.apk
           body: |
-            NUBTK Office Hours Signed Release
-            Application ID: com.aistudio.nubtkofficehours.qvnf
-            Version: 1.2
-            Version Code: 3
+            ## NUBTK Office Hours Release ${{ github.ref_name }}
+            
+            **Track Your Time. Know Your Progress.**
+            
+            ### Included in this release:
+            - Permanently signed release APK (`NUBTK-Office-Hours-Signed-APK.apk`) allowing seamless updates without uninstalling
+            - Application ID: `com.aistudio.nubtkofficehours.qvnf` (Version 1.3, Code 4)
+            - Theme-aware Home Screen Widget automatically supporting Light & Dark mode
+            - Manual refresh button on widget with live progress spinner and tap debouncing
+            - Single-trigger persistent notification when daily office hours target is completed
+            - Persistent employee information across all refreshes, navigation, and restarts
+            - Notification ON/OFF preference switch in Settings
+            - Clean automatic return navigation to Home upon saving settings
+            
+            **Developer:** Md. Abdul Halim Khan (Lecturer, CSE, Northern University of Business and Technology, Khulna)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Cleanup Keystore
-        if: always()
-        run: |
-          rm -f "${GITHUB_WORKSPACE}/release-keystore.jks"

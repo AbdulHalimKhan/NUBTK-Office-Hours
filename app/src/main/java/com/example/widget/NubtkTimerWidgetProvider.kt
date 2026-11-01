@@ -19,6 +19,7 @@ import com.example.notifications.NotificationHelper
 import com.example.utils.DateTimeUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.format.DateTimeFormatter
@@ -29,6 +30,11 @@ class NubtkTimerWidgetProvider : AppWidgetProvider() {
     companion object {
         const val ACTION_WIDGET_PUNCH_IN = "com.example.widget.ACTION_WIDGET_PUNCH_IN"
         const val ACTION_WIDGET_PUNCH_OUT = "com.example.widget.ACTION_WIDGET_PUNCH_OUT"
+        const val ACTION_WIDGET_REFRESH = "com.example.widget.ACTION_WIDGET_REFRESH"
+
+        private const val REFRESH_COOLDOWN_MS = 2500L
+        @Volatile
+        private var lastRefreshTimestamp: Long = 0L
 
         fun updateAllWidgets(context: Context) {
             val appWidgetManager = AppWidgetManager.getInstance(context)
@@ -57,15 +63,51 @@ class NubtkTimerWidgetProvider : AppWidgetProvider() {
         when (intent.action) {
             Intent.ACTION_DATE_CHANGED,
             Intent.ACTION_TIME_CHANGED,
-            Intent.ACTION_TIMEZONE_CHANGED -> {
+            Intent.ACTION_TIMEZONE_CHANGED,
+            Intent.ACTION_CONFIGURATION_CHANGED -> {
                 updateAllWidgets(context)
+            }
+            ACTION_WIDGET_REFRESH -> {
+                val now = System.currentTimeMillis()
+                if (now - lastRefreshTimestamp < REFRESH_COOLDOWN_MS) {
+                    showToast(context, "Please wait a moment before refreshing again.")
+                    return
+                }
+                lastRefreshTimestamp = now
+
+                val appWidgetManager = AppWidgetManager.getInstance(context)
+                val thisWidget = ComponentName(context, NubtkTimerWidgetProvider::class.java)
+                val appWidgetIds = appWidgetManager.getAppWidgetIds(thisWidget)
+
+                // Show loading spinner immediately in widgets
+                for (id in appWidgetIds) {
+                    val loadingViews = RemoteViews(context.packageName, R.layout.widget_nubtk_timer)
+                    loadingViews.setViewVisibility(R.id.btn_widget_refresh, View.GONE)
+                    loadingViews.setViewVisibility(R.id.widget_refresh_progress, View.VISIBLE)
+                    appWidgetManager.partiallyUpdateAppWidget(id, loadingViews)
+                }
+
+                val pendingResult = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        delay(350L) // Small delay for smooth feedback
+                        for (appWidgetId in appWidgetIds) {
+                            updateAppWidget(context, appWidgetManager, appWidgetId)
+                        }
+                        showToast(context, "Widget refreshed")
+                    } catch (e: Exception) {
+                        showToast(context, "Refresh error: ${e.message}")
+                    } finally {
+                        pendingResult.finish()
+                    }
+                }
             }
             ACTION_WIDGET_PUNCH_IN -> {
                 val pendingResult = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         val db = AttendanceDatabase.getDatabase(context)
-                        val repository = AttendanceRepository(db.attendanceDao())
+                        val repository = AttendanceRepository(db.attendanceDao(), context)
                         val activePeriod = repository.getActivePeriod()
                         if (activePeriod == null) {
                             showToast(context, "No active attendance period found.")
@@ -100,6 +142,7 @@ class NubtkTimerWidgetProvider : AppWidgetProvider() {
                                     result.onSuccess { record ->
                                         val formattedTime = DateTimeUtils.formatTimestampTo12H(record.punchInTimestamp)
                                         showToast(context, "Punched In at $formattedTime")
+                                        NotificationHelper.resetNotificationTriggeredState(context)
                                         NotificationHelper.scheduleWorkHoursAlarm(
                                             context,
                                             record.punchInTimestamp ?: System.currentTimeMillis(),
@@ -124,7 +167,7 @@ class NubtkTimerWidgetProvider : AppWidgetProvider() {
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         val db = AttendanceDatabase.getDatabase(context)
-                        val repository = AttendanceRepository(db.attendanceDao())
+                        val repository = AttendanceRepository(db.attendanceDao(), context)
                         val activePeriod = repository.getActivePeriod()
                         if (activePeriod == null) {
                             showToast(context, "No active attendance period found.")
@@ -166,6 +209,22 @@ class NubtkTimerWidgetProvider : AppWidgetProvider() {
         )
         views.setOnClickPendingIntent(R.id.widget_root, appPendingIntent)
 
+        // Refresh Button PendingIntent
+        val refreshIntent = Intent(context, NubtkTimerWidgetProvider::class.java).apply {
+            action = ACTION_WIDGET_REFRESH
+        }
+        val refreshPendingIntent = PendingIntent.getBroadcast(
+            context,
+            103,
+            refreshIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        views.setOnClickPendingIntent(R.id.btn_widget_refresh, refreshPendingIntent)
+
+        // Reset refresh icon and progress visibility
+        views.setViewVisibility(R.id.btn_widget_refresh, View.VISIBLE)
+        views.setViewVisibility(R.id.widget_refresh_progress, View.GONE)
+
         // Punch In PendingIntent
         val punchInIntent = Intent(context, NubtkTimerWidgetProvider::class.java).apply {
             action = ACTION_WIDGET_PUNCH_IN
@@ -197,7 +256,7 @@ class NubtkTimerWidgetProvider : AppWidgetProvider() {
 
         try {
             val db = AttendanceDatabase.getDatabase(context)
-            val repository = AttendanceRepository(db.attendanceDao())
+            val repository = AttendanceRepository(db.attendanceDao(), context)
             val activePeriod = repository.getActivePeriod()
 
             if (activePeriod == null) {
@@ -227,7 +286,6 @@ class NubtkTimerWidgetProvider : AppWidgetProvider() {
                 when {
                     isOfficialHoliday -> {
                         // CASE B: OFFICIAL HOLIDAY
-                        // Display badge "HOLIDAY", show holiday name/description, completely hide time count
                         views.setTextViewText(R.id.widget_status_badge, "HOLIDAY")
                         views.setViewVisibility(R.id.widget_timer_container, View.GONE)
                         views.setViewVisibility(R.id.widget_special_day_container, View.VISIBLE)
@@ -244,7 +302,6 @@ class NubtkTimerWidgetProvider : AppWidgetProvider() {
 
                     isApprovedLeave -> {
                         // CASE C: APPROVED LEAVE
-                        // Display badge "ON LEAVE", show leave reason/info, completely hide time count
                         views.setTextViewText(R.id.widget_status_badge, "ON LEAVE")
                         views.setViewVisibility(R.id.widget_timer_container, View.GONE)
                         views.setViewVisibility(R.id.widget_special_day_container, View.VISIBLE)
@@ -279,8 +336,7 @@ class NubtkTimerWidgetProvider : AppWidgetProvider() {
                     }
 
                     else -> {
-                        // CASE A: NORMAL WORKING DAY (or holiday designated as declared office day)
-                        // Preserve normal time count and working hour calculation
+                        // CASE A: NORMAL WORKING DAY
                         views.setViewVisibility(R.id.widget_timer_container, View.VISIBLE)
                         views.setViewVisibility(R.id.widget_special_day_container, View.GONE)
                         views.setViewVisibility(R.id.widget_actions_row, View.VISIBLE)
@@ -300,7 +356,7 @@ class NubtkTimerWidgetProvider : AppWidgetProvider() {
                                 )
                                 views.setTextViewText(R.id.widget_sub_text, "Daily Target: $targetFormatted")
                             }
-                            record.punchInTimestamp != null && record.punchOutTimestamp == null -> {
+                            record.punchOutTimestamp == null -> {
                                 val elapsedMillis = System.currentTimeMillis() - record.punchInTimestamp
                                 val targetMillis = targetMins * 60 * 1000L
                                 val remainingMillis = targetMillis - elapsedMillis
@@ -328,7 +384,7 @@ class NubtkTimerWidgetProvider : AppWidgetProvider() {
                                     views.setTextViewText(R.id.widget_sub_text, "Goal met! Don't forget to Punch Out")
                                 }
                             }
-                            record.punchOutTimestamp != null -> {
+                            else -> {
                                 views.setTextViewText(R.id.widget_status_badge, "SHIFT COMPLETED")
                                 val workedHrs = record.totalWorkingMinutes / 60
                                 val workedMins = record.totalWorkingMinutes % 60
@@ -343,7 +399,6 @@ class NubtkTimerWidgetProvider : AppWidgetProvider() {
                 }
             }
         } catch (e: Exception) {
-            // Fallback to normal working day time-count behaviour if holiday/leave info unavailable
             views.setViewVisibility(R.id.widget_timer_container, View.VISIBLE)
             views.setViewVisibility(R.id.widget_special_day_container, View.GONE)
             views.setViewVisibility(R.id.widget_actions_row, View.VISIBLE)
