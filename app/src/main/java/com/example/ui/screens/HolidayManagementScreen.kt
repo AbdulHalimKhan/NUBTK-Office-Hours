@@ -392,7 +392,7 @@ fun HolidayManagementScreen(
     }
 
     if (showAddDialog) {
-        var dateText by remember { mutableStateOf(activePeriod?.startDate ?: DateTimeUtils.todayIso()) }
+        var dateText by remember { mutableStateOf(DateTimeUtils.todayIso()) }
         var nameText by remember { mutableStateOf("") }
         var isOfficeDay by remember { mutableStateOf(false) }
 

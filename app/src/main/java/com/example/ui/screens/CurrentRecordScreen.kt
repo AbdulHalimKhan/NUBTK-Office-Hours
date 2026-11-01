@@ -62,11 +62,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.domain.AttendanceCalculator
+import androidx.compose.material.icons.automirrored.filled.Login
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import com.example.domain.DayAttendanceInfo
 import com.example.pdf.AttendancePdfGenerator
 import com.example.ui.components.AttendanceSummaryCard
 import com.example.ui.components.AttendanceTable
+import com.example.ui.components.EditSinglePunchDialog
 import com.example.ui.components.ManualPunchDialog
+import com.example.ui.components.PunchEditType
 import com.example.ui.components.UserProfileDialog
 import com.example.ui.theme.DarkGreen
 import com.example.ui.theme.PrimaryLimeGreen
@@ -100,6 +106,8 @@ fun CurrentRecordScreen(
     var customStartDate by remember { mutableStateOf("") }
     var customEndDate by remember { mutableStateOf("") }
 
+    var actionChooserDay by remember { mutableStateOf<DayAttendanceInfo?>(null) }
+    var singlePunchEditDay by remember { mutableStateOf<Pair<DayAttendanceInfo, PunchEditType>?>(null) }
     var editingDay by remember { mutableStateOf<DayAttendanceInfo?>(null) }
 
     val tenDayRanges = remember(activePeriod) {
@@ -536,11 +544,99 @@ fun CurrentRecordScreen(
             // Attendance Table
             AttendanceTable(
                 days = displayedDays,
-                onDayClick = { day -> editingDay = day }
+                onDayClick = { day -> actionChooserDay = day }
             )
 
             Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+
+    if (actionChooserDay != null) {
+        val targetDay = actionChooserDay!!
+        AlertDialog(
+            onDismissRequest = { actionChooserDay = null },
+            title = {
+                Text(
+                    text = "Edit Attendance (${DateTimeUtils.formatToDisplayDate(targetDay.date)})",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Choose punch action to perform for this date:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedButton(
+                        onClick = {
+                            val day = targetDay
+                            actionChooserDay = null
+                            singlePunchEditDay = Pair(day, PunchEditType.PUNCH_IN)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Edit Punch In (${targetDay.punchInFormatted})")
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            val day = targetDay
+                            actionChooserDay = null
+                            singlePunchEditDay = Pair(day, PunchEditType.PUNCH_OUT)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Edit Punch Out (${targetDay.punchOutFormatted})")
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            val day = targetDay
+                            actionChooserDay = null
+                            editingDay = day
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Edit Both / Manual Entry")
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { actionChooserDay = null }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
+    if (singlePunchEditDay != null) {
+        val (targetDay, editType) = singlePunchEditDay!!
+        EditSinglePunchDialog(
+            day = targetDay,
+            editType = editType,
+            onDismiss = { singlePunchEditDay = null },
+            onSave = { ts, note ->
+                if (editType == PunchEditType.PUNCH_IN) {
+                    viewModel.editPunchIn(targetDay.date, ts, note)
+                } else {
+                    viewModel.editPunchOut(targetDay.date, ts, note)
+                }
+                singlePunchEditDay = null
+            }
+        )
     }
 
     if (editingDay != null) {

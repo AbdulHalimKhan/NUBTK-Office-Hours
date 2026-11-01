@@ -16,7 +16,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Login
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Edit
@@ -24,6 +27,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -55,10 +59,13 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.domain.AttendanceStatus
 import com.example.domain.DayAttendanceInfo
+import com.example.domain.DayClassification
 import com.example.ui.components.AttendanceStatusBadge
 import com.example.ui.components.DelayIndicator
+import com.example.ui.components.EditSinglePunchDialog
 import com.example.ui.components.ManualPunchDialog
 import com.example.ui.components.PunchButton
+import com.example.ui.components.PunchEditType
 import com.example.ui.components.UserProfileDialog
 import com.example.ui.theme.DarkGreen
 import com.example.ui.theme.PrimaryLimeGreen
@@ -84,6 +91,7 @@ fun HomeScreen(
 
     var showManualPunchDialog by remember { mutableStateOf(false) }
     var showEditProfileDialog by remember { mutableStateOf(false) }
+    var singlePunchEditType by remember { mutableStateOf<PunchEditType?>(null) }
 
     Scaffold(
         topBar = {
@@ -379,18 +387,43 @@ fun HomeScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        OutlinedButton(
-                            onClick = { showManualPunchDialog = true },
-                            modifier = Modifier.testTag("edit_today_punch_button")
+                    val isTodayOffDay = todayInfo != null && (!todayInfo!!.isWorkingDay || todayInfo!!.baseClassification != DayClassification.WORKING_DAY)
+
+                    if (!isTodayOffDay) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Adjust Punch", fontSize = 12.sp)
+                            OutlinedButton(
+                                onClick = { singlePunchEditType = PunchEditType.PUNCH_IN },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("edit_punch_in_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Login,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Edit Punch In", fontSize = 12.sp)
+                            }
+
+                            OutlinedButton(
+                                onClick = { singlePunchEditType = PunchEditType.PUNCH_OUT },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("edit_punch_out_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Logout,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Edit Punch Out", fontSize = 12.sp)
+                            }
                         }
                     }
                 }
@@ -398,27 +431,85 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 3. Main Action Buttons: PUNCH IN / PUNCH OUT
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                val hasPunchIn = todayInfo?.punchInTimestamp != null
-                val hasPunchOut = todayInfo?.punchOutTimestamp != null
+            val isOffDay = todayInfo != null && (!todayInfo!!.isWorkingDay || todayInfo!!.baseClassification != DayClassification.WORKING_DAY)
 
-                PunchButton(
-                    isPunchIn = true,
-                    onClick = { viewModel.punchInToday() },
-                    modifier = Modifier.weight(1f),
-                    enabled = !hasPunchIn
-                )
+            if (isOffDay) {
+                // On offday, do NOT show any button. Just show the message "Today is your off day"
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("off_day_message_card"),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(18.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(46.dp)
+                                .background(DarkGreen.copy(alpha = 0.15f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Weekend,
+                                contentDescription = null,
+                                tint = DarkGreen,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column {
+                            Text(
+                                text = "Today is your off day",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            val reason = when (todayInfo?.baseClassification) {
+                                DayClassification.WEEKEND -> "Weekend"
+                                DayClassification.HOLIDAY -> todayInfo?.statusDetail?.takeIf { it.isNotBlank() } ?: "Public Holiday"
+                                DayClassification.MEDICAL_LEAVE -> "Medical Leave"
+                                DayClassification.CASUAL_LEAVE -> "Casual Leave"
+                                else -> todayInfo?.statusDetail ?: "No office hours scheduled today"
+                            }
+                            Text(
+                                text = reason,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                            )
+                        }
+                    }
+                }
+            } else {
+                // 3. Main Action Buttons: PUNCH IN / PUNCH OUT (shown on working days)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    val hasPunchIn = todayInfo?.punchInTimestamp != null
+                    val hasPunchOut = todayInfo?.punchOutTimestamp != null
 
-                PunchButton(
-                    isPunchIn = false,
-                    onClick = { viewModel.punchOutToday() },
-                    modifier = Modifier.weight(1f),
-                    enabled = hasPunchIn && !hasPunchOut
-                )
+                    PunchButton(
+                        isPunchIn = true,
+                        onClick = { viewModel.punchInToday() },
+                        modifier = Modifier.weight(1f),
+                        enabled = !hasPunchIn
+                    )
+
+                    PunchButton(
+                        isPunchIn = false,
+                        onClick = { viewModel.punchOutToday() },
+                        modifier = Modifier.weight(1f),
+                        enabled = hasPunchIn && !hasPunchOut
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -629,6 +720,22 @@ fun HomeScreen(
             onSave = { name, desig, dept, empId ->
                 viewModel.saveUserProfile(name, desig, dept, empId)
                 showEditProfileDialog = false
+            }
+        )
+    }
+
+    if (singlePunchEditType != null && todayInfo != null) {
+        EditSinglePunchDialog(
+            day = todayInfo!!,
+            editType = singlePunchEditType!!,
+            onDismiss = { singlePunchEditType = null },
+            onSave = { ts, note ->
+                if (singlePunchEditType == PunchEditType.PUNCH_IN) {
+                    viewModel.editPunchIn(todayInfo!!.date, ts, note)
+                } else {
+                    viewModel.editPunchOut(todayInfo!!.date, ts, note)
+                }
+                singlePunchEditType = null
             }
         )
     }

@@ -224,15 +224,15 @@ class AttendanceRepository(private val dao: AttendanceDao) {
             )
         }
 
-        // Initialize user profile if not present
+        // User profile starts completely blank upon installation; user inputs their own details
         val profile = dao.getUserProfile()
-        if (profile == null) {
+        if (profile != null && profile.name == "Md. Abdul Halim Khan" && profile.designation == "Lecturer") {
             dao.saveUserProfile(
                 UserProfileEntity(
                     id = 1,
-                    name = "Md. Abdul Halim Khan",
-                    designation = "Lecturer",
-                    department = "Computer Science & Engineering",
+                    name = "",
+                    designation = "",
+                    department = "",
                     employeeId = ""
                 )
             )

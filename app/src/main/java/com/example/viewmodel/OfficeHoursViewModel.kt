@@ -210,6 +210,68 @@ class OfficeHoursViewModel(
         }
     }
 
+    fun editPunchIn(
+        dateIso: String,
+        inTimestamp: Long?,
+        note: String? = null
+    ) {
+        viewModelScope.launch {
+            val period = activePeriod.value ?: return@launch
+            val existing = repository.getRecordForDate(period.id, dateIso)
+            val currentOut = existing?.punchOutTimestamp
+            val duration = DateTimeUtils.calculateDurationMinutes(inTimestamp, currentOut)
+            val status = when {
+                inTimestamp != null && currentOut != null -> "COMPLETED"
+                inTimestamp != null -> "IN_PROGRESS"
+                else -> "WORKING_DAY"
+            }
+            val record = AttendanceRecordEntity(
+                id = existing?.id ?: 0,
+                periodId = period.id,
+                date = dateIso,
+                status = status,
+                punchInTimestamp = inTimestamp,
+                punchOutTimestamp = currentOut,
+                totalWorkingMinutes = duration,
+                note = note ?: existing?.note
+            )
+            repository.saveRecord(record)
+            val msg = if (inTimestamp != null) "Punch In saved for ${DateTimeUtils.formatToDisplayDate(dateIso)}" else "Punch In cleared for ${DateTimeUtils.formatToDisplayDate(dateIso)}"
+            _messageEvent.emit(msg)
+        }
+    }
+
+    fun editPunchOut(
+        dateIso: String,
+        outTimestamp: Long?,
+        note: String? = null
+    ) {
+        viewModelScope.launch {
+            val period = activePeriod.value ?: return@launch
+            val existing = repository.getRecordForDate(period.id, dateIso)
+            val currentIn = existing?.punchInTimestamp
+            val duration = DateTimeUtils.calculateDurationMinutes(currentIn, outTimestamp)
+            val status = when {
+                currentIn != null && outTimestamp != null -> "COMPLETED"
+                currentIn != null -> "IN_PROGRESS"
+                else -> "WORKING_DAY"
+            }
+            val record = AttendanceRecordEntity(
+                id = existing?.id ?: 0,
+                periodId = period.id,
+                date = dateIso,
+                status = status,
+                punchInTimestamp = currentIn,
+                punchOutTimestamp = outTimestamp,
+                totalWorkingMinutes = duration,
+                note = note ?: existing?.note
+            )
+            repository.saveRecord(record)
+            val msg = if (outTimestamp != null) "Punch Out saved for ${DateTimeUtils.formatToDisplayDate(dateIso)}" else "Punch Out cleared for ${DateTimeUtils.formatToDisplayDate(dateIso)}"
+            _messageEvent.emit(msg)
+        }
+    }
+
     fun createNewPeriod(
         name: String,
         startDate: String,

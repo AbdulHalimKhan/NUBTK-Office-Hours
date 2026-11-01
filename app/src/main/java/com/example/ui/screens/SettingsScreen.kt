@@ -68,7 +68,9 @@ import com.example.ui.components.ConfirmationDialog
 import com.example.ui.theme.DarkGreen
 import com.example.ui.theme.PrimaryLimeGreen
 import com.example.viewmodel.OfficeHoursViewModel
+import com.example.utils.DateTimeUtils
 import java.time.DayOfWeek
+import java.time.LocalDate
 import java.time.format.TextStyle
 import java.util.Locale
 
@@ -548,9 +550,10 @@ private fun CreatePeriodDialog(
     onDismiss: () -> Unit,
     onConfirm: (name: String, startDate: String, endDate: String, dailyHours: Int, dailyMinutes: Int, weekendDays: Set<Int>, includeBangladeshHolidays: Boolean) -> Unit
 ) {
+    val today = remember { LocalDate.now() }
     var name by remember { mutableStateOf("") }
-    var start by remember { mutableStateOf("2026-09-21") }
-    var end by remember { mutableStateOf("2026-10-20") }
+    var start by remember { mutableStateOf(today.format(DateTimeUtils.ISO_DATE_FORMATTER)) }
+    var end by remember { mutableStateOf(today.plusDays(29).format(DateTimeUtils.ISO_DATE_FORMATTER)) }
     var hours by remember { mutableStateOf("8") }
     var minutes by remember { mutableStateOf("0") }
     var weekends by remember { mutableStateOf(setOf(DayOfWeek.FRIDAY.value, DayOfWeek.SATURDAY.value)) }

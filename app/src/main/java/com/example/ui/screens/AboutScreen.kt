@@ -120,7 +120,7 @@ fun AboutScreen(
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = "Version 1.0.0",
+                text = "Version 1.1",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

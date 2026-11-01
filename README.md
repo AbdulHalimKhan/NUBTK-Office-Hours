@@ -119,15 +119,15 @@ NUBTK-Office-Hours/
 ## Automated GitHub Actions APK Build
 
 This repository includes an automated GitHub Actions workflow (`.github/workflows/build-apk.yml`):
-* **On Push/PR**: Automatically verifies builds and generates `app-debug.apk` and `NUBTK-Office-Hours-v1.0.0.apk`.
+* **On Push/PR**: Automatically verifies builds and generates `app-debug.apk` and `NUBTK-Office-Hours-v1.1.apk`.
 * **Artifact Upload**: Download the compiled APK anytime from the **Actions** tab as `NUBTK-Office-Hours-APK`.
-* **On Release Tag (`v*`)**: Automatically creates a GitHub Release and attaches `NUBTK-Office-Hours-v1.0.0.apk` for direct download.
+* **On Release Tag (`v*`)**: Automatically creates a GitHub Release and attaches `NUBTK-Office-Hours-v1.1.apk` for direct download.
 
 ---
 
 ## Installation on Android Device
 
-1. Download `NUBTK-Office-Hours-v1.0.0.apk` or `app-debug.apk` onto your Android phone.
+1. Download `NUBTK-Office-Hours-v1.1.apk` or `app-debug.apk` onto your Android phone.
 2. Open the downloaded APK from your browser or file manager.
 3. If prompted by Android, enable **"Allow installation from this source"**.
 4. Tap **Install**.

@@ -214,7 +214,7 @@ fun LeaveManagementScreen(
     }
 
     if (showAddDialog) {
-        var dateText by remember { mutableStateOf(activePeriod?.startDate ?: DateTimeUtils.todayIso()) }
+        var dateText by remember { mutableStateOf(DateTimeUtils.todayIso()) }
         var leaveType by remember { mutableStateOf("MEDICAL") } // MEDICAL or CASUAL
         var noteText by remember { mutableStateOf("") }
 

@@ -46,7 +46,7 @@ jobs:
             exit 1
           fi
           mkdir -p build-artifacts
-          cp app/build/outputs/apk/debug/app-debug.apk build-artifacts/NUBTK-Office-Hours-v1.0.0.apk
+          cp app/build/outputs/apk/debug/app-debug.apk build-artifacts/NUBTK-Office-Hours-v1.1.apk
           cp app/build/outputs/apk/debug/app-debug.apk build-artifacts/app-debug.apk
 
       - name: Upload APK Artifact
@@ -64,7 +64,7 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            build-artifacts/NUBTK-Office-Hours-v1.0.0.apk
+            build-artifacts/NUBTK-Office-Hours-v1.1.apk
           body: |
             ## NUBTK Office Hours Release ${{ github.ref_name }}
             

@@ -119,17 +119,28 @@ fun AppDatePickerDialog(
     onDateSelected: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val today = remember { LocalDate.now() }
+    val todayMillis = remember(today) {
+        today.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
+    }
+
     val initialMillis = remember(initialDateIso) {
         try {
-            val localDate = LocalDate.parse(initialDateIso.trim(), DateTimeUtils.ISO_DATE_FORMATTER)
-            localDate.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
+            val trimmed = initialDateIso.trim()
+            if (trimmed.isNotEmpty()) {
+                val localDate = LocalDate.parse(trimmed, DateTimeUtils.ISO_DATE_FORMATTER)
+                localDate.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
+            } else {
+                todayMillis
+            }
         } catch (_: Exception) {
-            LocalDate.now().atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
+            todayMillis
         }
     }
 
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = initialMillis,
+        initialDisplayedMonthMillis = todayMillis,
         initialDisplayMode = DisplayMode.Picker
     )
 
