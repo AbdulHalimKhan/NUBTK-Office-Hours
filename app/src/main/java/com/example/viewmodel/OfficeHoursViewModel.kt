@@ -18,8 +18,10 @@ import com.example.domain.DayAttendanceInfo
 import com.example.domain.PeriodAttendanceReport
 import com.example.domain.PeriodSummary
 import com.example.domain.UserProfile
+import com.example.notifications.NotificationHelper
 import com.example.pdf.AttendancePdfGenerator
 import com.example.utils.DateTimeUtils
+import com.example.widget.NubtkTimerWidgetProvider
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -155,6 +157,12 @@ class OfficeHoursViewModel(
             val todayIso = DateTimeUtils.todayIso()
             val result = repository.punchIn(period.id, todayIso)
             result.onSuccess {
+                NotificationHelper.scheduleWorkHoursAlarm(
+                    getApplication(),
+                    it.punchInTimestamp ?: System.currentTimeMillis(),
+                    period.dailyWorkingMinutes
+                )
+                NubtkTimerWidgetProvider.updateAllWidgets(getApplication())
                 _messageEvent.emit("Punched In successfully at ${DateTimeUtils.formatTimestampTo12H(it.punchInTimestamp)}")
             }.onFailure {
                 _messageEvent.emit(it.message ?: "Punch In failed")
@@ -172,6 +180,8 @@ class OfficeHoursViewModel(
             val todayIso = DateTimeUtils.todayIso()
             val result = repository.punchOut(period.id, todayIso)
             result.onSuccess {
+                NotificationHelper.cancelWorkHoursAlarm(getApplication())
+                NubtkTimerWidgetProvider.updateAllWidgets(getApplication())
                 val durFormatted = DateTimeUtils.formatMinutesToHoursMinutes(it.totalWorkingMinutes)
                 _messageEvent.emit("Punched Out successfully! Duration: $durFormatted")
             }.onFailure {
@@ -206,6 +216,7 @@ class OfficeHoursViewModel(
                 note = note
             )
             repository.saveRecord(record)
+            NubtkTimerWidgetProvider.updateAllWidgets(getApplication())
             _messageEvent.emit("Attendance record updated for ${DateTimeUtils.formatToDisplayDate(dateIso)}")
         }
     }
@@ -236,6 +247,14 @@ class OfficeHoursViewModel(
                 note = note ?: existing?.note
             )
             repository.saveRecord(record)
+            if (inTimestamp != null && currentOut == null) {
+                NotificationHelper.scheduleWorkHoursAlarm(
+                    getApplication(),
+                    inTimestamp,
+                    period.dailyWorkingMinutes
+                )
+            }
+            NubtkTimerWidgetProvider.updateAllWidgets(getApplication())
             val msg = if (inTimestamp != null) "Punch In saved for ${DateTimeUtils.formatToDisplayDate(dateIso)}" else "Punch In cleared for ${DateTimeUtils.formatToDisplayDate(dateIso)}"
             _messageEvent.emit(msg)
         }
@@ -267,6 +286,10 @@ class OfficeHoursViewModel(
                 note = note ?: existing?.note
             )
             repository.saveRecord(record)
+            if (outTimestamp != null) {
+                NotificationHelper.cancelWorkHoursAlarm(getApplication())
+            }
+            NubtkTimerWidgetProvider.updateAllWidgets(getApplication())
             val msg = if (outTimestamp != null) "Punch Out saved for ${DateTimeUtils.formatToDisplayDate(dateIso)}" else "Punch Out cleared for ${DateTimeUtils.formatToDisplayDate(dateIso)}"
             _messageEvent.emit(msg)
         }

@@ -1,33 +1,37 @@
-# NUBTK Office Hours
+# NUBTK Timer
 
 **Track Your Time. Know Your Progress.**
 
-A personal Android application for tracking office attendance, working hours, weekends, holidays, medical leave, casual leave, and attendance reports. Built specifically for faculty and staff at Northern University of Business and Technology, Khulna (NUBTK).
+A personal Android application for tracking office attendance, working hours, live daily countdown, home screen widget, weekends, holidays, medical leave, casual leave, and attendance reports. Built specifically for faculty and staff at Northern University of Business and Technology, Khulna (NUBTK).
 
 ---
 
 ## Features
 
+* **Today's Live Working Countdown**: Live second-by-second countdown towards reaching your daily working hours target, with interactive progress indicator.
+* **Target Met Notification**: Automatic Android system notification when your daily office hours target is completed to remind you to punch out.
+* **Home Screen App Widget**: Dedicated Android widget featuring Punch In and Punch Out quick-action buttons, today's status, and live time countdown.
+* **Off-Day Detection**: Automatically recognizes weekends, holidays, and leaves with "Today is your off day" notice and disabled punch actions.
+* **Separate Punch In & Punch Out Editing**: Dedicated edit dialogs with calendar defaulting to current date for easy timestamp corrections.
 * **Custom Attendance Periods**: Configure attendance cycles (e.g., 21st to 20th of the month) with active status and date validation.
 * **Daily Working-Hour Configuration**: Set expected daily hours (e.g., 8 hours / 480 minutes) per period.
-* **Interactive Punch In / Punch Out**: One-tap attendance logging with automatic duration tracking and manual adjustment modal.
+* **Interactive Punch In / Punch Out**: One-tap attendance logging with automatic duration tracking.
 * **Working-Hour Calculation**: Precise calculation of completed working days, expected hours, actual hours, and delay/extra hours.
 * **Dynamic Delay vs. Extra Status**:
   * Displays **Extra** in **Green (`#2E7D32`)** when actual hours exceed expected hours.
   * Displays **Delay** in **Red (`#D32F2F`)** when actual hours are less than expected hours.
   * Displays **On Time** in **Amber (`#F57F17`)** when actual hours equal expected hours.
-  * Clean duration formatting without `+/-` signs.
 * **Configurable Weekends**: Toggle weekend days (default: Friday & Saturday) with automatic zero-hour expected work day exclusion.
 * **Bangladesh Public Holidays Integration**: Pre-populated official Bangladesh national holidays with support for toggling individual holidays as active office days.
 * **Leave Management**: Dedicated support for Medical Leave and Casual Leave with full persistence and summary calculation.
 * **Current & Previous Records**: Access past attendance cycles and current period records.
-* **10-Day & Custom Range Views**: Filter attendance by 10-day segments or pick custom date ranges using dual manual typing or interactive Material 3 calendar modal.
+* **10-Day & Custom Range Views**: Filter attendance by 10-day segments or pick custom date ranges using interactive calendar modal starting from the current date.
 * **Downloadable PDF Attendance Reports**:
   * Generates clean, printable multi-page PDF documents.
   * Displays user profile header (Name, Designation, Department, Employee ID).
   * Lists date-by-date punch details, status, and comprehensive summary.
   * Shows exact storage location and provides one-tap file opening / path copying.
-* **User Profile Section**: Save and update Name, Designation, Department, and Employee ID persistently.
+* **Clean Initial Installation**: Profile inputs remain blank until configured by user.
 * **Offline-First Architecture**: 100% local persistence via Android Room Database with SQLite.
 * **Material Design 3**: Modern, responsive UI with customized lime-green theme and automatic light/dark mode support.
 

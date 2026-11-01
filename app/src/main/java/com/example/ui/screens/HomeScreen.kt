@@ -1,5 +1,10 @@
 package com.example.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +32,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -44,6 +50,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,14 +59,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.domain.AttendanceStatus
 import com.example.domain.DayAttendanceInfo
 import com.example.domain.DayClassification
+import com.example.notifications.NotificationHelper
 import com.example.ui.components.AttendanceStatusBadge
 import com.example.ui.components.DelayIndicator
 import com.example.ui.components.EditSinglePunchDialog
@@ -72,6 +82,8 @@ import com.example.ui.theme.PrimaryLimeGreen
 import com.example.ui.theme.SecondaryGreen
 import com.example.utils.DateTimeUtils
 import com.example.viewmodel.OfficeHoursViewModel
+import kotlinx.coroutines.delay
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,6 +96,7 @@ fun HomeScreen(
     onNavigateHolidays: () -> Unit,
     onNavigateLeaves: () -> Unit
 ) {
+    val context = LocalContext.current
     val activePeriod by viewModel.activePeriod.collectAsStateWithLifecycle()
     val summary by viewModel.activePeriodSummary.collectAsStateWithLifecycle()
     val todayInfo by viewModel.todayInfo.collectAsStateWithLifecycle()
@@ -92,6 +105,29 @@ fun HomeScreen(
     var showManualPunchDialog by remember { mutableStateOf(false) }
     var showEditProfileDialog by remember { mutableStateOf(false) }
     var singlePunchEditType by remember { mutableStateOf<PunchEditType?>(null) }
+    var currentTime by remember { mutableStateOf(System.currentTimeMillis()) }
+    var notifiedTargetMetForDate by remember { mutableStateOf<String?>(null) }
+
+    // Request runtime notification permission on Android 13+ (API 33+)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val permissionLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission()
+        ) { /* permission callback handled */ }
+
+        LaunchedEffect(Unit) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
+    // Ticker running every second for live countdown
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000L)
+            currentTime = System.currentTimeMillis()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -114,7 +150,7 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "NUBTK Office Hours",
+                                text = "NUBTK Timer",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -432,6 +468,232 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(14.dp))
 
             val isOffDay = todayInfo != null && (!todayInfo!!.isWorkingDay || todayInfo!!.baseClassification != DayClassification.WORKING_DAY)
+            val dailyWorkingMins = activePeriod?.dailyWorkingMinutes ?: 480
+            val targetDurationMillis = dailyWorkingMins * 60 * 1000L
+            val isPunchedInActive = todayInfo?.punchInTimestamp != null && todayInfo?.punchOutTimestamp == null
+
+            // Today's Working Countdown Card (shown on working days when period is active)
+            if (!isOffDay && activePeriod != null) {
+                val inTimestamp = todayInfo?.punchInTimestamp ?: 0L
+                val elapsedMillis = if (isPunchedInActive) (currentTime - inTimestamp).coerceAtLeast(0L) else 0L
+                val remainingMillis = targetDurationMillis - elapsedMillis
+                val isTargetMet = isPunchedInActive && remainingMillis <= 0L
+
+                // Trigger notification when work hours meet the daily target
+                LaunchedEffect(isTargetMet) {
+                    val todayIso = DateTimeUtils.todayIso()
+                    if (isTargetMet && notifiedTargetMetForDate != todayIso) {
+                        notifiedTargetMetForDate = todayIso
+                        val hrs = dailyWorkingMins / 60
+                        val mins = dailyWorkingMins % 60
+                        NotificationHelper.showWorkHoursCompletedNotification(context, hrs, mins)
+                    }
+                }
+
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("today_countdown_card"),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isTargetMet) {
+                            PrimaryLimeGreen.copy(alpha = 0.12f)
+                        } else {
+                            MaterialTheme.colorScheme.surface
+                        }
+                    ),
+                    border = BorderStroke(
+                        1.dp,
+                        if (isTargetMet) PrimaryLimeGreen.copy(alpha = 0.6f)
+                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .background(
+                                            if (isTargetMet) PrimaryLimeGreen else DarkGreen,
+                                            CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Timer,
+                                        contentDescription = "Countdown Timer",
+                                        tint = if (isTargetMet) Color.Black else Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "TODAY'S WORKING COUNTDOWN",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isTargetMet) DarkGreen else MaterialTheme.colorScheme.primary,
+                                        letterSpacing = 1.sp
+                                    )
+                                    Text(
+                                        text = "Daily Target: ${DateTimeUtils.formatMinutesToHoursMinutes(dailyWorkingMins)}",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            if (isPunchedInActive) {
+                                Box(
+                                    modifier = Modifier
+                                        .background(
+                                            if (isTargetMet) DarkGreen else MaterialTheme.colorScheme.primaryContainer,
+                                            RoundedCornerShape(100.dp)
+                                        )
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = if (isTargetMet) "GOAL MET 🎉" else "IN PROGRESS",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isTargetMet) Color.White else MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        when {
+                            isPunchedInActive -> {
+                                val remainingSecondsTotal = (remainingMillis / 1000).coerceAtLeast(0L)
+                                val remHrs = remainingSecondsTotal / 3600
+                                val remMins = (remainingSecondsTotal % 3600) / 60
+                                val remSecs = remainingSecondsTotal % 60
+                                val formattedCountdown = String.format(Locale.getDefault(), "%02d:%02d:%02d", remHrs, remMins, remSecs)
+
+                                val progress = (elapsedMillis.toFloat() / targetDurationMillis.toFloat()).coerceIn(0f, 1f)
+
+                                if (isTargetMet) {
+                                    val overtimeTotalSecs = (-remainingMillis / 1000).coerceAtLeast(0L)
+                                    val ovHrs = overtimeTotalSecs / 3600
+                                    val ovMins = (overtimeTotalSecs % 3600) / 60
+                                    val ovSecs = overtimeTotalSecs % 60
+                                    val formattedOvertime = String.format(Locale.getDefault(), "+%02d:%02d:%02d", ovHrs, ovMins, ovSecs)
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.Bottom
+                                    ) {
+                                        Column {
+                                            Text(
+                                                text = "Required Hours Completed!",
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = DarkGreen
+                                            )
+                                            Text(
+                                                text = "Overtime / Extra time worked:",
+                                                fontSize = 11.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Text(
+                                            text = formattedOvertime,
+                                            fontSize = 24.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = DarkGreen
+                                        )
+                                    }
+                                } else {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.Bottom
+                                    ) {
+                                        Column {
+                                            Text(
+                                                text = "Remaining Time:",
+                                                fontSize = 11.5.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            val targetFinishTimestamp = inTimestamp + targetDurationMillis
+                                            Text(
+                                                text = "Finish by: ${DateTimeUtils.formatTimestampTo12H(targetFinishTimestamp)}",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                        Text(
+                                            text = formattedCountdown,
+                                            fontSize = 26.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+                                LinearProgressIndicator(
+                                    progress = { progress },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(8.dp)
+                                        .clip(RoundedCornerShape(4.dp)),
+                                    color = if (isTargetMet) DarkGreen else PrimaryLimeGreen,
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    val percent = (progress * 100).toInt()
+                                    Text(
+                                        text = "$percent% completed",
+                                        fontSize = 10.5.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = if (isTargetMet) "Target achieved" else "${DateTimeUtils.formatMinutesToHoursMinutes((elapsedMillis / 60000).toInt())} worked",
+                                        fontSize = 10.5.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            todayInfo?.punchOutTimestamp != null -> {
+                                Text(
+                                    text = "Shift completed for today! Total duration: ${todayInfo?.durationFormatted ?: "—"}",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            else -> {
+                                Text(
+                                    text = "Ready to start work. Punch In to begin today\'s ${DateTimeUtils.formatMinutesToHoursMinutes(dailyWorkingMins)} countdown.",
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+            }
 
             if (isOffDay) {
                 // On offday, do NOT show any button. Just show the message "Today is your off day"

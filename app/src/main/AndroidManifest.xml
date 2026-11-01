@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -32,6 +35,29 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
-    </application>
 
+        <!-- NUBTK Timer App Widget -->
+        <receiver
+            android:name=".widget.NubtkTimerWidgetProvider"
+            android:exported="true"
+            android:label="NUBTK Timer Widget">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.widget.ACTION_WIDGET_PUNCH_IN" />
+                <action android:name="com.example.widget.ACTION_WIDGET_PUNCH_OUT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/nubtk_timer_widget_info" />
+        </receiver>
+
+        <!-- Work Hours Completed Alarm Receiver -->
+        <receiver
+            android:name=".notifications.WorkHoursAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.ACTION_WORK_HOURS_COMPLETED" />
+            </intent-filter>
+        </receiver>
+    </application>
 </manifest>

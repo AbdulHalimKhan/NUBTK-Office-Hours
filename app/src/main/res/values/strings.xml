@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">NUBTK Office Hours</string>
+    <string name="app_name">NUBTK Timer</string>
+    <string name="widget_description">NUBTK Timer - Punch In, Punch Out, and today\'s work hours countdown.</string>
 </resources>

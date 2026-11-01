@@ -103,7 +103,7 @@ fun AboutScreen(
             Spacer(modifier = Modifier.height(14.dp))
 
             Text(
-                text = "NUBTK Office Hours",
+                text = "NUBTK Timer",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface

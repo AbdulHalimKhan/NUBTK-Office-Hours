@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "NUBTK Office Hours"
+rootProject.name = "NUBTK Timer"
 
 include(":app")
