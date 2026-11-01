@@ -7,8 +7,10 @@ on:
       - master
     tags:
       - 'v*'
-  pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -22,32 +24,32 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
-          cache: 'gradle'
+          cache: gradle
 
-      - name: Grant execute permission for gradlew
+      - name: Grant execute permission
         run: chmod +x gradlew
 
-      - name: Setup Environment
+      - name: Prepare Environment
         run: |
           cp .env.example .env 2>/dev/null || touch .env
-          if [ -f "debug.keystore.base64" ]; then
-            base64 -d debug.keystore.base64 > debug.keystore 2>/dev/null || true
-          fi
 
       - name: Decode Permanent Keystore
-        id: decode_keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "Decoding KEYSTORE_BASE64 from GitHub Secrets..."
-            echo "$KEYSTORE_BASE64" | base64 -d > "${GITHUB_WORKSPACE}/release-keystore.jks"
-            echo "keystore_decoded=true" >> $GITHUB_OUTPUT
-          else
-            echo "WARNING: KEYSTORE_BASE64 secret is not configured in repository secrets!"
-            echo "keystore_decoded=false" >> $GITHUB_OUTPUT
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "ERROR: KEYSTORE_BASE64 is missing"
+            exit 1
+          fi
+
+          echo "$KEYSTORE_BASE64" | base64 --decode \
+            > "${GITHUB_WORKSPACE}/release-keystore.jks"
+
+          if [ ! -s "${GITHUB_WORKSPACE}/release-keystore.jks" ]; then
+            echo "ERROR: Keystore decoding failed"
+            exit 1
           fi
 
       - name: Build Signed Release APK
@@ -56,42 +58,34 @@ jobs:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          ./gradlew assembleRelease --stacktrace
-
-      - name: Verify APK and Prepare Artifact
-        run: |
-          if [ ! -f "app/build/outputs/apk/release/app-release.apk" ]; then
-            echo "Error: app-release.apk was not generated!"
+          if [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "ERROR: Signing passwords are missing"
             exit 1
           fi
 
-          mkdir -p build-artifacts
-          cp app/build/outputs/apk/release/app-release.apk build-artifacts/NUBTK-Office-Hours-Signed-APK.apk
-          cp app/build/outputs/apk/release/app-release.apk build-artifacts/app-release.apk
+          ./gradlew assembleRelease --stacktrace
 
-          echo "=========================================="
-          echo "Release APK successfully created:"
-          ls -la build-artifacts/NUBTK-Office-Hours-Signed-APK.apk
-          echo "=========================================="
-
-          # Verify signature using apksigner if available in Android SDK
-          APKSIGNER=$(find $ANDROID_HOME/build-tools -name apksigner 2>/dev/null | sort -V | tail -n 1)
-          if [ -n "$APKSIGNER" ]; then
-            echo "Verifying APK Signature with apksigner..."
-            $APKSIGNER verify --verbose build-artifacts/NUBTK-Office-Hours-Signed-APK.apk || true
-          fi
-
-          # Verify package name / application ID using aapt
-          AAPT=$(find $ANDROID_HOME/build-tools -name aapt 2>/dev/null | sort -V | tail -n 1)
-          if [ -n "$AAPT" ]; then
-            echo "Checking Package & Version metadata..."
-            $AAPT dump badging build-artifacts/NUBTK-Office-Hours-Signed-APK.apk | grep -E "package: name=|versionCode=|versionName=" || true
-          fi
-
-      - name: Cleanup Keystore
-        if: always()
+      - name: Verify APK Signature
         run: |
-          rm -f "${GITHUB_WORKSPACE}/release-keystore.jks"
+          APK="app/build/outputs/apk/release/app-release.apk"
+
+          if [ ! -f "$APK" ]; then
+            echo "ERROR: Release APK not found"
+            exit 1
+          fi
+
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" \
+            -name apksigner | sort -V | tail -n 1)
+
+          if [ -z "$APKSIGNER" ]; then
+            echo "ERROR: apksigner not found"
+            exit 1
+          fi
+
+          "$APKSIGNER" verify --verbose "$APK"
+
+          mkdir -p build-artifacts
+          cp "$APK" build-artifacts/NUBTK-Office-Hours-Signed-APK.apk
 
       - name: Upload Signed APK Artifact
         uses: actions/upload-artifact@v4
@@ -105,23 +99,16 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: NUBTK Office Hours ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-          files: |
-            build-artifacts/NUBTK-Office-Hours-Signed-APK.apk
+          files: build-artifacts/NUBTK-Office-Hours-Signed-APK.apk
           body: |
-            ## NUBTK Office Hours Release ${{ github.ref_name }}
-            
-            **Track Your Time. Know Your Progress.**
-            
-            ### Included in this release:
-            - Permanently signed release APK (`NUBTK-Office-Hours-Signed-APK.apk`) allowing seamless updates without uninstalling
-            - Application ID: `com.aistudio.nubtkofficehours.qvnf` (Version 1.2, Code 3)
-            - Improved Home Screen Widget with Holiday & Approved Leave status badges and full descriptions
-            - Complete time-count hiding on holidays and approved leaves
-            - Official Bangladesh local time (`Asia/Dhaka`) support
-            - Automatic widget refresh on date and record changes
-            
-            **Developer:** Md. Abdul Halim Khan (Lecturer, CSE, Northern University of Business and Technology, Khulna)
+            NUBTK Office Hours Signed Release
+            Application ID: com.aistudio.nubtkofficehours.qvnf
+            Version: 1.2
+            Version Code: 3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cleanup Keystore
+        if: always()
+        run: |
+          rm -f "${GITHUB_WORKSPACE}/release-keystore.jks"
