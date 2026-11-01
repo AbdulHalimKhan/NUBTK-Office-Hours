@@ -375,6 +375,7 @@ class OfficeHoursViewModel(
     fun switchActivePeriod(periodId: Long) {
         viewModelScope.launch {
             repository.setActivePeriod(periodId)
+            NubtkTimerWidgetProvider.updateAllWidgets(getApplication())
             _messageEvent.emit("Switched active attendance period.")
         }
     }
@@ -382,6 +383,7 @@ class OfficeHoursViewModel(
     fun deletePeriod(period: AttendancePeriodEntity) {
         viewModelScope.launch {
             repository.deletePeriod(period)
+            NubtkTimerWidgetProvider.updateAllWidgets(getApplication())
             _messageEvent.emit("Period '${period.name}' deleted.")
         }
     }
@@ -390,6 +392,7 @@ class OfficeHoursViewModel(
         viewModelScope.launch {
             val period = activePeriod.value ?: return@launch
             repository.setWeekendDaysForPeriod(period.id, days.toList())
+            NubtkTimerWidgetProvider.updateAllWidgets(getApplication())
             _messageEvent.emit("Weekend settings updated.")
         }
     }
@@ -399,6 +402,7 @@ class OfficeHoursViewModel(
         viewModelScope.launch {
             val period = activePeriod.value ?: return@launch
             val addedCount = repository.importBangladeshHolidaysForPeriod(period.id, period.startDate, period.endDate)
+            NubtkTimerWidgetProvider.updateAllWidgets(getApplication())
             if (addedCount > 0) {
                 _messageEvent.emit("Added $addedCount Bangladesh holidays (Google Calendar) to this period.")
             } else {
@@ -410,6 +414,7 @@ class OfficeHoursViewModel(
     fun setHolidayOfficeDay(holidayId: Long, isOfficeDay: Boolean) {
         viewModelScope.launch {
             repository.setHolidayOfficeDay(holidayId, isOfficeDay)
+            NubtkTimerWidgetProvider.updateAllWidgets(getApplication())
             if (isOfficeDay) {
                 _messageEvent.emit("Set as regular Office Day (requires punch in/out & working hours).")
             } else {
@@ -424,7 +429,7 @@ class OfficeHoursViewModel(
             // Check if already leave on date
             val leave = repository.getLeaveForDate(period.id, date)
             if (leave != null) {
-                onWarningNeeded?.invoke("This date already has a ${leave.leaveType} leave. Holiday will take precedence in records.")
+                onWarningNeeded?.invoke("This date already has a ${leave.leaveType} leave. Official Holiday will take precedence in records.")
             }
             val holiday = HolidayEntity(
                 periodId = period.id,
@@ -433,6 +438,7 @@ class OfficeHoursViewModel(
                 isOfficeDay = isOfficeDay
             )
             repository.insertHoliday(holiday)
+            NubtkTimerWidgetProvider.updateAllWidgets(getApplication())
             _messageEvent.emit("Holiday added: ${holiday.name}")
         }
     }
@@ -442,6 +448,7 @@ class OfficeHoursViewModel(
             val period = activePeriod.value ?: return@launch
             val holiday = HolidayEntity(id = id, periodId = period.id, date = date, name = name, isOfficeDay = isOfficeDay)
             repository.updateHoliday(holiday)
+            NubtkTimerWidgetProvider.updateAllWidgets(getApplication())
             _messageEvent.emit("Holiday updated.")
         }
     }
@@ -449,6 +456,7 @@ class OfficeHoursViewModel(
     fun deleteHoliday(holidayId: Long) {
         viewModelScope.launch {
             repository.deleteHolidayById(holidayId)
+            NubtkTimerWidgetProvider.updateAllWidgets(getApplication())
             _messageEvent.emit("Holiday removed.")
         }
     }
@@ -458,8 +466,8 @@ class OfficeHoursViewModel(
         viewModelScope.launch {
             val period = activePeriod.value ?: return@launch
             val holiday = repository.getHolidayForDate(period.id, date)
-            if (holiday != null) {
-                onWarningNeeded?.invoke("This date is already marked as a Holiday ('${holiday.name}'). Leave will take priority.")
+            if (holiday != null && !holiday.isOfficeDay) {
+                onWarningNeeded?.invoke("This date is already marked as an Official Holiday ('${holiday.name}'). Holiday will take precedence.")
             }
             val leave = LeaveEntity(
                 periodId = period.id,
@@ -468,6 +476,7 @@ class OfficeHoursViewModel(
                 note = note
             )
             repository.insertLeave(leave)
+            NubtkTimerWidgetProvider.updateAllWidgets(getApplication())
             _messageEvent.emit("$leaveType Leave added for ${DateTimeUtils.formatToDisplayDate(date)}.")
         }
     }
@@ -477,6 +486,7 @@ class OfficeHoursViewModel(
             val period = activePeriod.value ?: return@launch
             val leave = LeaveEntity(id = id, periodId = period.id, date = date, leaveType = leaveType, note = note)
             repository.updateLeave(leave)
+            NubtkTimerWidgetProvider.updateAllWidgets(getApplication())
             _messageEvent.emit("Leave record updated.")
         }
     }
@@ -484,6 +494,7 @@ class OfficeHoursViewModel(
     fun deleteLeave(leaveId: Long) {
         viewModelScope.launch {
             repository.deleteLeaveById(leaveId)
+            NubtkTimerWidgetProvider.updateAllWidgets(getApplication())
             _messageEvent.emit("Leave record removed.")
         }
     }

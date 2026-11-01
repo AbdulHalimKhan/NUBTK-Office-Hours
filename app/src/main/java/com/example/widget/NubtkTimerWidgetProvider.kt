@@ -15,14 +15,12 @@ import com.example.MainActivity
 import com.example.R
 import com.example.data.local.AttendanceDatabase
 import com.example.data.repository.AttendanceRepository
-import com.example.domain.DayClassification
 import com.example.notifications.NotificationHelper
 import com.example.utils.DateTimeUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -57,6 +55,11 @@ class NubtkTimerWidgetProvider : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         when (intent.action) {
+            Intent.ACTION_DATE_CHANGED,
+            Intent.ACTION_TIME_CHANGED,
+            Intent.ACTION_TIMEZONE_CHANGED -> {
+                updateAllWidgets(context)
+            }
             ACTION_WIDGET_PUNCH_IN -> {
                 val pendingResult = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
@@ -67,31 +70,44 @@ class NubtkTimerWidgetProvider : AppWidgetProvider() {
                         if (activePeriod == null) {
                             showToast(context, "No active attendance period found.")
                         } else {
+                            val todayDate = DateTimeUtils.today()
                             val todayIso = DateTimeUtils.todayIso()
                             val weekends = repository.getWeekendSettingsForPeriod(activePeriod.id).first().map { it.dayOfWeek }.toSet()
                             val holidays = repository.getHolidaysForPeriod(activePeriod.id).first().associateBy { it.date }
                             val leaves = repository.getLeavesForPeriod(activePeriod.id).first().associateBy { it.date }
 
-                            val todayDate = LocalDate.now()
-                            val isWeekend = weekends.contains(todayDate.dayOfWeek.value)
                             val holiday = holidays[todayIso]
-                            val isHoliday = holiday != null && !holiday.isOfficeDay
-                            val isLeave = leaves.containsKey(todayIso)
+                            val isOfficialHoliday = holiday != null && !holiday.isOfficeDay
+                            val leave = leaves[todayIso]
+                            val isApprovedLeave = leave != null
+                            val isWeekend = weekends.contains(todayDate.dayOfWeek.value)
 
-                            if (isWeekend || isHoliday || isLeave) {
-                                showToast(context, "Today is your off day! Punch In disabled.")
-                            } else {
-                                val result = repository.punchIn(activePeriod.id, todayIso)
-                                result.onSuccess { record ->
-                                    val formattedTime = DateTimeUtils.formatTimestampTo12H(record.punchInTimestamp)
-                                    showToast(context, "Punched In at $formattedTime")
-                                    NotificationHelper.scheduleWorkHoursAlarm(
-                                        context,
-                                        record.punchInTimestamp ?: System.currentTimeMillis(),
-                                        activePeriod.dailyWorkingMinutes
-                                    )
-                                }.onFailure { error ->
-                                    showToast(context, error.message ?: "Punch In failed")
+                            // Priority 1: Official Holiday, Priority 2: Approved Leave, Priority 3: Weekend
+                            when {
+                                isOfficialHoliday -> {
+                                    val name = holiday?.name ?: "Official Holiday"
+                                    showToast(context, "Today is an official holiday ($name)! Punch In disabled.")
+                                }
+                                isApprovedLeave -> {
+                                    val type = if (leave?.leaveType.equals("MEDICAL", true)) "Medical" else "Casual"
+                                    showToast(context, "Today is your approved $type leave! Punch In disabled.")
+                                }
+                                isWeekend -> {
+                                    showToast(context, "Today is your off day (Weekend)! Punch In disabled.")
+                                }
+                                else -> {
+                                    val result = repository.punchIn(activePeriod.id, todayIso)
+                                    result.onSuccess { record ->
+                                        val formattedTime = DateTimeUtils.formatTimestampTo12H(record.punchInTimestamp)
+                                        showToast(context, "Punched In at $formattedTime")
+                                        NotificationHelper.scheduleWorkHoursAlarm(
+                                            context,
+                                            record.punchInTimestamp ?: System.currentTimeMillis(),
+                                            activePeriod.dailyWorkingMinutes
+                                        )
+                                    }.onFailure { error ->
+                                        showToast(context, error.message ?: "Punch In failed")
+                                    }
                                 }
                             }
                         }
@@ -138,7 +154,7 @@ class NubtkTimerWidgetProvider : AppWidgetProvider() {
     private suspend fun updateAppWidget(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int) {
         val views = RemoteViews(context.packageName, R.layout.widget_nubtk_timer)
 
-        // Launch app on background click
+        // Launch app on background tap
         val appIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -174,8 +190,8 @@ class NubtkTimerWidgetProvider : AppWidgetProvider() {
         )
         views.setOnClickPendingIntent(R.id.btn_widget_punch_out, punchOutPendingIntent)
 
-        // Format today's date
-        val today = LocalDate.now()
+        // Format today's date using Bangladesh local time
+        val today = DateTimeUtils.today()
         val dateFormatted = today.format(DateTimeFormatter.ofPattern("EEE, MMM d", Locale.getDefault()))
         views.setTextViewText(R.id.widget_date_text, dateFormatted)
 
@@ -185,7 +201,10 @@ class NubtkTimerWidgetProvider : AppWidgetProvider() {
             val activePeriod = repository.getActivePeriod()
 
             if (activePeriod == null) {
+                // Fallback: No active period setup
                 views.setTextViewText(R.id.widget_status_badge, "NO ACTIVE PERIOD")
+                views.setViewVisibility(R.id.widget_timer_container, View.VISIBLE)
+                views.setViewVisibility(R.id.widget_special_day_container, View.GONE)
                 views.setTextViewText(R.id.widget_countdown_text, "--:--:--")
                 views.setTextViewText(R.id.widget_sub_text, "Open NUBTK Timer to set up period")
                 views.setViewVisibility(R.id.widget_offday_text, View.GONE)
@@ -197,86 +216,138 @@ class NubtkTimerWidgetProvider : AppWidgetProvider() {
                 val leaves = repository.getLeavesForPeriod(activePeriod.id).first().associateBy { it.date }
                 val record = repository.getRecordForDate(activePeriod.id, todayIso)
 
-                val isWeekend = weekends.contains(today.dayOfWeek.value)
                 val holiday = holidays[todayIso]
-                val isHoliday = holiday != null && !holiday.isOfficeDay
+                val isOfficialHoliday = holiday != null && !holiday.isOfficeDay
                 val leave = leaves[todayIso]
-                val isLeave = leave != null
+                val isApprovedLeave = leave != null
+                val isWeekend = weekends.contains(today.dayOfWeek.value)
 
-                val isOffDay = isWeekend || isHoliday || isLeave
+                // DISPLAY PRIORITY:
+                // 1. Official Holiday > 2. Approved Leave > 3. Weekend > 4. Normal Working Day
+                when {
+                    isOfficialHoliday -> {
+                        // CASE B: OFFICIAL HOLIDAY
+                        // Display badge "HOLIDAY", show holiday name/description, completely hide time count
+                        views.setTextViewText(R.id.widget_status_badge, "HOLIDAY")
+                        views.setViewVisibility(R.id.widget_timer_container, View.GONE)
+                        views.setViewVisibility(R.id.widget_special_day_container, View.VISIBLE)
+                        views.setTextViewText(
+                            R.id.widget_special_day_title,
+                            holiday?.name?.ifBlank { "Official Holiday" } ?: "Official Holiday"
+                        )
+                        views.setTextViewText(R.id.widget_special_day_desc, "Public Holiday • Office Closed")
 
-                if (isOffDay) {
-                    val reason = when {
-                        isWeekend -> "Weekend"
-                        isHoliday -> holiday?.name ?: "Holiday"
-                        isLeave -> "${leave?.leaveType} Leave"
-                        else -> "Off Day"
+                        views.setViewVisibility(R.id.widget_actions_row, View.GONE)
+                        views.setViewVisibility(R.id.widget_offday_text, View.VISIBLE)
+                        views.setTextViewText(R.id.widget_offday_text, "Official Holiday")
                     }
-                    views.setViewVisibility(R.id.widget_offday_text, View.VISIBLE)
-                    views.setViewVisibility(R.id.widget_actions_row, View.GONE)
-                    views.setTextViewText(R.id.widget_status_badge, "OFF DAY ($reason)")
-                    views.setTextViewText(R.id.widget_countdown_text, "No Office Today")
-                    views.setTextViewText(R.id.widget_sub_text, "Enjoy your day off!")
-                } else {
-                    views.setViewVisibility(R.id.widget_offday_text, View.GONE)
-                    views.setViewVisibility(R.id.widget_actions_row, View.VISIBLE)
 
-                    val targetMins = activePeriod.dailyWorkingMinutes
-                    val targetHours = targetMins / 60
-                    val targetRemainderMins = targetMins % 60
-                    val targetFormatted = String.format(Locale.getDefault(), "%dh %02dm", targetHours, targetRemainderMins)
+                    isApprovedLeave -> {
+                        // CASE C: APPROVED LEAVE
+                        // Display badge "ON LEAVE", show leave reason/info, completely hide time count
+                        views.setTextViewText(R.id.widget_status_badge, "ON LEAVE")
+                        views.setViewVisibility(R.id.widget_timer_container, View.GONE)
+                        views.setViewVisibility(R.id.widget_special_day_container, View.VISIBLE)
 
-                    when {
-                        record == null || record.punchInTimestamp == null -> {
-                            views.setTextViewText(R.id.widget_status_badge, "READY TO PUNCH IN")
-                            views.setTextViewText(
-                                R.id.widget_countdown_text,
-                                String.format(Locale.getDefault(), "%02d:%02d:00", targetHours, targetRemainderMins)
-                            )
-                            views.setTextViewText(R.id.widget_sub_text, "Daily Target: $targetFormatted")
+                        val leaveTypeStr = if (leave?.leaveType.equals("MEDICAL", ignoreCase = true)) {
+                            "Medical Leave"
+                        } else {
+                            "Casual Leave"
                         }
-                        record.punchInTimestamp != null && record.punchOutTimestamp == null -> {
-                            val elapsedMillis = System.currentTimeMillis() - record.punchInTimestamp
-                            val targetMillis = targetMins * 60 * 1000L
-                            val remainingMillis = targetMillis - elapsedMillis
+                        views.setTextViewText(R.id.widget_special_day_title, leaveTypeStr)
+                        views.setTextViewText(
+                            R.id.widget_special_day_desc,
+                            leave?.note?.ifBlank { null } ?: "Approved Leave Day • Off Duty"
+                        )
 
-                            if (remainingMillis > 0) {
-                                val remainingSecs = (remainingMillis / 1000) % 60
-                                val remainingMins = (remainingMillis / (1000 * 60)) % 60
-                                val remainingHrs = remainingMillis / (1000 * 60 * 60)
-                                views.setTextViewText(R.id.widget_status_badge, "WORKING • COUNTDOWN")
+                        views.setViewVisibility(R.id.widget_actions_row, View.GONE)
+                        views.setViewVisibility(R.id.widget_offday_text, View.VISIBLE)
+                        views.setTextViewText(R.id.widget_offday_text, "Approved Leave Day")
+                    }
+
+                    isWeekend -> {
+                        // WEEKEND OFF DAY
+                        views.setTextViewText(R.id.widget_status_badge, "WEEKEND")
+                        views.setViewVisibility(R.id.widget_timer_container, View.GONE)
+                        views.setViewVisibility(R.id.widget_special_day_container, View.VISIBLE)
+                        views.setTextViewText(R.id.widget_special_day_title, "Weekend")
+                        views.setTextViewText(R.id.widget_special_day_desc, "Weekly Off Day • Office Closed")
+
+                        views.setViewVisibility(R.id.widget_actions_row, View.GONE)
+                        views.setViewVisibility(R.id.widget_offday_text, View.VISIBLE)
+                        views.setTextViewText(R.id.widget_offday_text, "Today is your off day")
+                    }
+
+                    else -> {
+                        // CASE A: NORMAL WORKING DAY (or holiday designated as declared office day)
+                        // Preserve normal time count and working hour calculation
+                        views.setViewVisibility(R.id.widget_timer_container, View.VISIBLE)
+                        views.setViewVisibility(R.id.widget_special_day_container, View.GONE)
+                        views.setViewVisibility(R.id.widget_actions_row, View.VISIBLE)
+                        views.setViewVisibility(R.id.widget_offday_text, View.GONE)
+
+                        val targetMins = activePeriod.dailyWorkingMinutes
+                        val targetHours = targetMins / 60
+                        val targetRemainderMins = targetMins % 60
+                        val targetFormatted = String.format(Locale.getDefault(), "%dh %02dm", targetHours, targetRemainderMins)
+
+                        when {
+                            record == null || record.punchInTimestamp == null -> {
+                                views.setTextViewText(R.id.widget_status_badge, "READY TO PUNCH IN")
                                 views.setTextViewText(
                                     R.id.widget_countdown_text,
-                                    String.format(Locale.getDefault(), "%02d:%02d:%02d", remainingHrs, remainingMins, remainingSecs)
+                                    String.format(Locale.getDefault(), "%02d:%02d:00", targetHours, targetRemainderMins)
                                 )
-                                views.setTextViewText(R.id.widget_sub_text, "Remaining to reach $targetFormatted goal")
-                            } else {
-                                val overtimeMillis = -remainingMillis
-                                val overSecs = (overtimeMillis / 1000) % 60
-                                val overMins = (overtimeMillis / (1000 * 60)) % 60
-                                val overHrs = overtimeMillis / (1000 * 60 * 60)
-                                views.setTextViewText(R.id.widget_status_badge, "GOAL COMPLETED! 🎉")
-                                views.setTextViewText(
-                                    R.id.widget_countdown_text,
-                                    String.format(Locale.getDefault(), "+%02d:%02d:%02d", overHrs, overMins, overSecs)
-                                )
-                                views.setTextViewText(R.id.widget_sub_text, "Goal met! Don't forget to Punch Out")
+                                views.setTextViewText(R.id.widget_sub_text, "Daily Target: $targetFormatted")
                             }
-                        }
-                        record.punchOutTimestamp != null -> {
-                            views.setTextViewText(R.id.widget_status_badge, "SHIFT COMPLETED")
-                            val workedHrs = record.totalWorkingMinutes / 60
-                            val workedMins = record.totalWorkingMinutes % 60
-                            views.setTextViewText(
-                                R.id.widget_countdown_text,
-                                String.format(Locale.getDefault(), "%dh %02dm", workedHrs, workedMins)
-                            )
-                            views.setTextViewText(R.id.widget_sub_text, "Punched out • Daily total recorded")
+                            record.punchInTimestamp != null && record.punchOutTimestamp == null -> {
+                                val elapsedMillis = System.currentTimeMillis() - record.punchInTimestamp
+                                val targetMillis = targetMins * 60 * 1000L
+                                val remainingMillis = targetMillis - elapsedMillis
+
+                                if (remainingMillis > 0) {
+                                    val remainingSecs = (remainingMillis / 1000) % 60
+                                    val remainingMins = (remainingMillis / (1000 * 60)) % 60
+                                    val remainingHrs = remainingMillis / (1000 * 60 * 60)
+                                    views.setTextViewText(R.id.widget_status_badge, "WORKING • COUNTDOWN")
+                                    views.setTextViewText(
+                                        R.id.widget_countdown_text,
+                                        String.format(Locale.getDefault(), "%02d:%02d:%02d", remainingHrs, remainingMins, remainingSecs)
+                                    )
+                                    views.setTextViewText(R.id.widget_sub_text, "Remaining to reach $targetFormatted goal")
+                                } else {
+                                    val overtimeMillis = -remainingMillis
+                                    val overSecs = (overtimeMillis / 1000) % 60
+                                    val overMins = (overtimeMillis / (1000 * 60)) % 60
+                                    val overHrs = overtimeMillis / (1000 * 60 * 60)
+                                    views.setTextViewText(R.id.widget_status_badge, "GOAL COMPLETED! 🎉")
+                                    views.setTextViewText(
+                                        R.id.widget_countdown_text,
+                                        String.format(Locale.getDefault(), "+%02d:%02d:%02d", overHrs, overMins, overSecs)
+                                    )
+                                    views.setTextViewText(R.id.widget_sub_text, "Goal met! Don't forget to Punch Out")
+                                }
+                            }
+                            record.punchOutTimestamp != null -> {
+                                views.setTextViewText(R.id.widget_status_badge, "SHIFT COMPLETED")
+                                val workedHrs = record.totalWorkingMinutes / 60
+                                val workedMins = record.totalWorkingMinutes % 60
+                                views.setTextViewText(
+                                    R.id.widget_countdown_text,
+                                    String.format(Locale.getDefault(), "%dh %02dm", workedHrs, workedMins)
+                                )
+                                views.setTextViewText(R.id.widget_sub_text, "Punched out • Daily total recorded")
+                            }
                         }
                     }
                 }
             }
         } catch (e: Exception) {
+            // Fallback to normal working day time-count behaviour if holiday/leave info unavailable
+            views.setViewVisibility(R.id.widget_timer_container, View.VISIBLE)
+            views.setViewVisibility(R.id.widget_special_day_container, View.GONE)
+            views.setViewVisibility(R.id.widget_actions_row, View.VISIBLE)
+            views.setViewVisibility(R.id.widget_offday_text, View.GONE)
             views.setTextViewText(R.id.widget_status_badge, "NUBTK TIMER")
             views.setTextViewText(R.id.widget_countdown_text, "--:--:--")
             views.setTextViewText(R.id.widget_sub_text, "Tap to open app")

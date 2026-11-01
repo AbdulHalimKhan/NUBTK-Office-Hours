@@ -43,6 +43,12 @@ object AttendanceCalculator {
         var isHolidayOfficeDay = false
 
         when {
+            // Priority 1: Official Holiday
+            holiday != null && !holiday.isOfficeDay -> {
+                baseClassification = DayClassification.HOLIDAY
+                statusDetail = holiday.name.ifBlank { "Public Holiday" }
+            }
+            // Priority 2: Approved Leave (Medical / Casual)
             leave != null && leave.leaveType.equals("MEDICAL", ignoreCase = true) -> {
                 baseClassification = DayClassification.MEDICAL_LEAVE
                 statusDetail = leave.note?.ifBlank { null } ?: "Medical Leave"
@@ -51,20 +57,18 @@ object AttendanceCalculator {
                 baseClassification = DayClassification.CASUAL_LEAVE
                 statusDetail = leave.note?.ifBlank { null } ?: "Casual Leave"
             }
-            holiday != null -> {
-                if (holiday.isOfficeDay) {
-                    baseClassification = DayClassification.WORKING_DAY
-                    statusDetail = "${holiday.name} (Declared Office Day)"
-                    isHolidayOfficeDay = true
-                } else {
-                    baseClassification = DayClassification.HOLIDAY
-                    statusDetail = holiday.name
-                }
+            // Holiday designated as declared office day
+            holiday != null && holiday.isOfficeDay -> {
+                baseClassification = DayClassification.WORKING_DAY
+                statusDetail = "${holiday.name} (Declared Office Day)"
+                isHolidayOfficeDay = true
             }
+            // Weekend
             isWeekend -> {
                 baseClassification = DayClassification.WEEKEND
                 statusDetail = "Weekend (${dayOfWeek.getDisplayName(TextStyle.FULL, Locale.US)})"
             }
+            // Priority 3: Normal Working Day
             else -> {
                 baseClassification = DayClassification.WORKING_DAY
                 statusDetail = null

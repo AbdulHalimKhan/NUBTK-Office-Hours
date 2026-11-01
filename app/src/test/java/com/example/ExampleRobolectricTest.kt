@@ -77,4 +77,33 @@ class ExampleRobolectricTest {
         assertEquals(9600, summary.expectedMinutes) // 160:00
         assertEquals(DelayColorState.RED, summary.delayColorState)
     }
+
+    @Test
+    fun `test official holiday takes precedence over approved leave on same date`() {
+        val testDate = LocalDate.of(2026, 12, 16) // Victory Day
+        val holiday = com.example.data.local.HolidayEntity(
+            id = 10,
+            periodId = 1,
+            date = "2026-12-16",
+            name = "Victory Day",
+            isOfficeDay = false
+        )
+        val leave = com.example.data.local.LeaveEntity(
+            id = 20,
+            periodId = 1,
+            date = "2026-12-16",
+            leaveType = "CASUAL",
+            note = "Planned family trip"
+        )
+        val dayInfo = AttendanceCalculator.classifyDay(
+            date = testDate,
+            weekendDays = emptySet(),
+            holidaysMap = mapOf("2026-12-16" to holiday),
+            leavesMap = mapOf("2026-12-16" to leave),
+            record = null,
+            dailyWorkingMinutes = 480
+        )
+        assertEquals(DayClassification.HOLIDAY, dayInfo.baseClassification)
+        assertEquals("Victory Day", dayInfo.statusDetail)
+    }
 }

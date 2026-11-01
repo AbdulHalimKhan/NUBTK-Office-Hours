@@ -34,7 +34,7 @@
             android:textSize="11sp" />
     </LinearLayout>
 
-    <!-- Center Timer & Status Section -->
+    <!-- Center Section -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -43,6 +43,7 @@
         android:gravity="center"
         android:paddingVertical="4dp">
 
+        <!-- Status Badge -->
         <TextView
             android:id="@+id/widget_status_badge"
             android:layout_width="wrap_content"
@@ -55,27 +56,72 @@
             android:textSize="10sp"
             android:textStyle="bold" />
 
-        <TextView
-            android:id="@+id/widget_countdown_text"
-            android:layout_width="wrap_content"
+        <!-- Working Day Countdown Section (Visible on working days, completely hidden on holidays/leaves) -->
+        <LinearLayout
+            android:id="@+id/widget_timer_container"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="08:00:00"
-            android:textColor="#FFFFFF"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:fontFamily="monospace"
-            android:layout_marginTop="2dp" />
+            android:orientation="vertical"
+            android:gravity="center"
+            android:visibility="visible">
 
-        <TextView
-            android:id="@+id/widget_sub_text"
-            android:layout_width="wrap_content"
+            <TextView
+                android:id="@+id/widget_countdown_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="08:00:00"
+                android:textColor="#FFFFFF"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace"
+                android:layout_marginTop="2dp" />
+
+            <TextView
+                android:id="@+id/widget_sub_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Daily Target: 8h 00m"
+                android:textColor="#A0B2A6"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <!-- Holiday / Leave / Special Day Section (Replaces time-count area on holidays and leaves) -->
+        <LinearLayout
+            android:id="@+id/widget_special_day_container"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Daily Target: 8h 00m"
-            android:textColor="#A0B2A6"
-            android:textSize="10sp" />
+            android:orientation="vertical"
+            android:gravity="center"
+            android:paddingHorizontal="4dp"
+            android:layout_marginTop="4dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/widget_special_day_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Official Holiday"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:maxLines="2" />
+
+            <TextView
+                android:id="@+id/widget_special_day_desc"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Office Closed"
+                android:textColor="#C8E6C9"
+                android:textSize="11sp"
+                android:gravity="center"
+                android:maxLines="2"
+                android:layout_marginTop="2dp" />
+        </LinearLayout>
+
     </LinearLayout>
 
-    <!-- Off Day Message (shown on weekends/holidays/leaves) -->
+    <!-- Off Day Message Banner (shown on holidays/leaves/weekends) -->
     <TextView
         android:id="@+id/widget_offday_text"
         android:layout_width="match_parent"

@@ -10,6 +10,7 @@ import java.util.Locale
 import kotlin.math.abs
 
 object DateTimeUtils {
+    val BANGLADESH_ZONE: ZoneId = ZoneId.of("Asia/Dhaka")
     val ISO_DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US)
     val DISPLAY_DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.US)
     val SHORT_DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM", Locale.US)
@@ -17,7 +18,7 @@ object DateTimeUtils {
     val TIME_24H_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.US)
     val FULL_DATE_TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a", Locale.US)
 
-    fun today(): LocalDate = LocalDate.now()
+    fun today(): LocalDate = LocalDate.now(BANGLADESH_ZONE)
 
     fun todayIso(): String = today().format(ISO_DATE_FORMATTER)
 
@@ -25,7 +26,7 @@ object DateTimeUtils {
         return try {
             LocalDate.parse(iso, ISO_DATE_FORMATTER)
         } catch (_: Exception) {
-            LocalDate.now()
+            today()
         }
     }
 
@@ -50,7 +51,7 @@ object DateTimeUtils {
     fun formatTimestampTo12H(timestamp: Long?): String {
         if (timestamp == null || timestamp <= 0) return "—"
         return try {
-            val localTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneId.systemDefault())
+            val localTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), BANGLADESH_ZONE)
             localTime.format(TIME_12H_FORMATTER)
         } catch (_: Exception) {
             "—"
@@ -60,7 +61,7 @@ object DateTimeUtils {
     fun formatTimestampTo24H(timestamp: Long?): String {
         if (timestamp == null || timestamp <= 0) return "—"
         return try {
-            val localTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneId.systemDefault())
+            val localTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), BANGLADESH_ZONE)
             localTime.format(TIME_24H_FORMATTER)
         } catch (_: Exception) {
             "—"
@@ -86,6 +87,6 @@ object DateTimeUtils {
 
     fun buildTimestamp(date: LocalDate, hour: Int, minute: Int): Long {
         val dateTime = LocalDateTime.of(date, LocalTime.of(hour, minute))
-        return dateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        return dateTime.atZone(BANGLADESH_ZONE).toInstant().toEpochMilli()
     }
 }
