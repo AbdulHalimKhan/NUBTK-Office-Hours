@@ -166,12 +166,6 @@ fun HolidayManagementScreen(
                                     fontWeight = FontWeight.Bold,
                                     color = DarkGreen
                                 )
-                                Text(
-                                    text = "Auto-import official public holidays for this period. Any holiday can be toggled to an office day as needed.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 11.5.sp
-                                )
                             }
                         }
 
@@ -193,33 +187,6 @@ fun HolidayManagementScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Import Bangladesh Holidays")
                         }
-                    }
-                }
-            }
-
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Business,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text(
-                            text = "Public Holidays have 0 expected hours. If your office stays open, set it as an 'Office Day' to expect full working hours.",
-                            fontSize = 11.5.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            lineHeight = 16.sp
-                        )
                     }
                 }
             }

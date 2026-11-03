@@ -1,7 +1,10 @@
 package com.example.ui.screens
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,6 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Login
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
@@ -23,16 +28,21 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +53,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import com.example.ui.components.DatePickerField
@@ -95,6 +106,7 @@ fun CurrentRecordScreen(
     val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
 
     var showEditProfileDialog by remember { mutableStateOf(false) }
+    var showOverflowMenu by remember { mutableStateOf(false) }
 
     val (targetFolderName, targetFolderPath) = remember(context) {
         AttendancePdfGenerator.getTargetFolderInfo(context)
@@ -114,6 +126,68 @@ fun CurrentRecordScreen(
         if (activePeriod != null) {
             AttendanceCalculator.generateTenDayRanges(activePeriod!!.startDate, activePeriod!!.endDate)
         } else emptyList()
+    }
+
+    val (displayedDays, displayedSummary, rangeTitle, exportStart, exportEnd) = remember(
+        selectedTabIndex,
+        selectedSectionIndex,
+        customStartDate,
+        customEndDate,
+        allDays,
+        fullSummary,
+        tenDayRanges,
+        activePeriod
+    ) {
+        if (selectedTabIndex == 0) {
+            PeriodViewData(
+                days = allDays,
+                summary = fullSummary,
+                title = "Full Period",
+                start = activePeriod?.startDate ?: "",
+                end = activePeriod?.endDate ?: ""
+            )
+        } else {
+            // Selected Days logic
+            if (selectedSectionIndex < tenDayRanges.size) {
+                val range = tenDayRanges[selectedSectionIndex]
+                val filtered = allDays.filter { it.date >= range.startDate && it.date <= range.endDate }
+                val summary = AttendanceCalculator.calculateSummary(filtered)
+                PeriodViewData(
+                    days = filtered,
+                    summary = summary,
+                    title = range.title,
+                    start = range.startDate,
+                    end = range.endDate
+                )
+            } else {
+                // Custom Range
+                val s = customStartDate.ifBlank { activePeriod?.startDate ?: "" }
+                val e = customEndDate.ifBlank { activePeriod?.endDate ?: "" }
+                val filtered = allDays.filter { it.date >= s && it.date <= e }
+                val summary = AttendanceCalculator.calculateSummary(filtered)
+                PeriodViewData(
+                    days = filtered,
+                    summary = summary,
+                    title = "Custom Range",
+                    start = s,
+                    end = e
+                )
+            }
+        }
+    }
+
+    val createDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        if (uri != null) {
+            viewModel.savePdfToUri(
+                context = context,
+                uri = uri,
+                startDateIso = exportStart,
+                endDateIso = exportEnd,
+                rangeTitle = rangeTitle
+            )
+        }
     }
 
     Scaffold(
@@ -138,6 +212,96 @@ fun CurrentRecordScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack, modifier = Modifier.testTag("back_button")) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(
+                        onClick = {
+                            createDocumentLauncher.launch("Attendance_Report.pdf")
+                        },
+                        modifier = Modifier.testTag("download_pdf_topbar_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Download,
+                            contentDescription = "Download Attendance PDF",
+                            tint = DarkGreen
+                        )
+                    }
+                    Box {
+                        IconButton(
+                            onClick = { showOverflowMenu = true },
+                            modifier = Modifier.testTag("pdf_overflow_menu_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "PDF Options"
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showOverflowMenu,
+                            onDismissRequest = { showOverflowMenu = false }
+                        ) {
+                            if (generatedPdf != null) {
+                                DropdownMenuItem(
+                                    text = { Text("Open PDF") },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.Visibility,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    },
+                                    onClick = {
+                                        showOverflowMenu = false
+                                        PdfShareUtils.openPdf(context, generatedPdf!!)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Share PDF") },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.Share,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    },
+                                    onClick = {
+                                        showOverflowMenu = false
+                                        PdfShareUtils.sharePdf(context, generatedPdf!!)
+                                    }
+                                )
+                                HorizontalDivider()
+                            }
+                            DropdownMenuItem(
+                                text = { Text("Copy Saved Folder Path") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.ContentCopy,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                onClick = {
+                                    showOverflowMenu = false
+                                    val pathToCopy = exportedPdfResult?.folderPath ?: targetFolderPath
+                                    PdfShareUtils.copyPathToClipboard(context, pathToCopy)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Edit Attached Profile") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                onClick = {
+                                    showOverflowMenu = false
+                                    showEditProfileDialog = true
+                                }
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -179,44 +343,6 @@ fun CurrentRecordScreen(
             }
 
             Spacer(modifier = Modifier.height(14.dp))
-
-            // Determine visible days and summary based on tab and section
-            val (displayedDays, displayedSummary, rangeTitle, exportStart, exportEnd) = if (selectedTabIndex == 0) {
-                PeriodViewData(
-                    days = allDays,
-                    summary = fullSummary,
-                    title = "Full Period",
-                    start = activePeriod?.startDate ?: "",
-                    end = activePeriod?.endDate ?: ""
-                )
-            } else {
-                // Selected Days logic
-                if (selectedSectionIndex < tenDayRanges.size) {
-                    val range = tenDayRanges[selectedSectionIndex]
-                    val filtered = allDays.filter { it.date >= range.startDate && it.date <= range.endDate }
-                    val summary = AttendanceCalculator.calculateSummary(filtered)
-                    PeriodViewData(
-                        days = filtered,
-                        summary = summary,
-                        title = range.title,
-                        start = range.startDate,
-                        end = range.endDate
-                    )
-                } else {
-                    // Custom Range
-                    val s = customStartDate.ifBlank { activePeriod?.startDate ?: "" }
-                    val e = customEndDate.ifBlank { activePeriod?.endDate ?: "" }
-                    val filtered = allDays.filter { it.date >= s && it.date <= e }
-                    val summary = AttendanceCalculator.calculateSummary(filtered)
-                    PeriodViewData(
-                        days = filtered,
-                        summary = summary,
-                        title = "Custom Range",
-                        start = s,
-                        end = e
-                    )
-                }
-            }
 
             // If Selected Days tab is active, show the 10-day section chips + custom option
             if (selectedTabIndex == 1) {
@@ -294,250 +420,6 @@ fun CurrentRecordScreen(
                 summary = displayedSummary,
                 title = "$rangeTitle Summary"
             )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Save PDF Section showing folder location
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("save_pdf_section_card"),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PictureAsPdf,
-                            contentDescription = null,
-                            tint = DarkGreen,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Text(
-                            text = "SAVE & EXPORT PDF REPORT",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = DarkGreen,
-                            letterSpacing = 0.5.sp
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Employee profile attached to PDF
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Badge,
-                                contentDescription = null,
-                                tint = DarkGreen,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Attached to PDF: ${userProfile?.name?.takeIf { it.isNotBlank() } ?: "Not Set"}",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                val desig = userProfile?.designation?.takeIf { it.isNotBlank() } ?: "Faculty/Staff"
-                                val dept = userProfile?.department?.takeIf { it.isNotBlank() } ?: "NUBTK"
-                                val empId = userProfile?.employeeId?.takeIf { it.isNotBlank() }
-                                Text(
-                                    text = "$desig • $dept" + if (empId != null) " • ID: $empId" else "",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            IconButton(
-                                onClick = { showEditProfileDialog = true },
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = "Edit Profile",
-                                    tint = DarkGreen,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Folder location where PDF will be saved
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Folder,
-                                        contentDescription = null,
-                                        tint = DarkGreen,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Text(
-                                        text = "Saved Folder Location:",
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-
-                                IconButton(
-                                    onClick = {
-                                        val pathToCopy = exportedPdfResult?.folderPath ?: targetFolderPath
-                                        PdfShareUtils.copyPathToClipboard(context, pathToCopy)
-                                    },
-                                    modifier = Modifier.size(24.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ContentCopy,
-                                        contentDescription = "Copy Folder Path",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(3.dp))
-                            Text(
-                                text = "📂 ${exportedPdfResult?.displayFolderPath ?: targetFolderName}",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = DarkGreen
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = exportedPdfResult?.folderPath ?: targetFolderPath,
-                                fontSize = 10.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                lineHeight = 14.sp
-                            )
-                        }
-                    }
-
-                    if (exportedPdfResult != null) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = DarkGreen.copy(alpha = 0.12f),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.CheckCircle,
-                                    contentDescription = null,
-                                    tint = DarkGreen,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "File saved successfully!",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = DarkGreen
-                                    )
-                                    Text(
-                                        text = exportedPdfResult!!.fileName,
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Action buttons
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                viewModel.generatePdf(
-                                    context = context,
-                                    startDateIso = exportStart,
-                                    endDateIso = exportEnd,
-                                    rangeTitle = rangeTitle
-                                )
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(46.dp)
-                                .testTag("download_pdf_button"),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = DarkGreen)
-                        ) {
-                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (generatedPdf != null) "RE-GENERATE PDF" else "SAVE PDF",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.5.sp
-                            )
-                        }
-
-                        if (generatedPdf != null) {
-                            Button(
-                                onClick = { PdfShareUtils.openPdf(context, generatedPdf!!) },
-                                modifier = Modifier
-                                    .height(46.dp)
-                                    .testTag("open_pdf_button"),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                            ) {
-                                Icon(Icons.Default.Visibility, contentDescription = "Open PDF", modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Open", fontSize = 12.sp)
-                            }
-
-                            OutlinedButton(
-                                onClick = { PdfShareUtils.sharePdf(context, generatedPdf!!) },
-                                modifier = Modifier
-                                    .height(46.dp)
-                                    .testTag("share_pdf_button"),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.Default.Share, contentDescription = "Share PDF", modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Share", fontSize = 12.sp)
-                            }
-                        }
-                    }
-                }
-            }
 
             Spacer(modifier = Modifier.height(16.dp))
 

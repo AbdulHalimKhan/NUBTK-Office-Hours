@@ -2,6 +2,7 @@ package com.example.viewmodel
 
 import android.app.Application
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -572,6 +573,71 @@ class OfficeHoursViewModel(
                 _generatedPdfFile.value = exportResult.file
                 _exportedPdfResult.value = exportResult
                 _messageEvent.emit("PDF saved to ${exportResult.displayFolderPath}: ${exportResult.fileName}")
+            }.onFailure { error ->
+                _messageEvent.emit("PDF generation failed: ${error.message}")
+            }
+        }
+    }
+
+    fun savePdfToUri(
+        context: Context,
+        uri: Uri,
+        startDateIso: String? = null,
+        endDateIso: String? = null,
+        rangeTitle: String = "Full Period",
+        onSuccess: (() -> Unit)? = null
+    ) {
+        viewModelScope.launch {
+            val period = activePeriod.value
+            if (period == null) {
+                _messageEvent.emit("No active period to export.")
+                return@launch
+            }
+
+            val allDays = activePeriodDays.value
+            val effectiveStart = startDateIso ?: period.startDate
+            val effectiveEnd = endDateIso ?: period.endDate
+
+            val filteredDays = allDays.filter { day ->
+                day.date >= effectiveStart && day.date <= effectiveEnd
+            }
+            val summary = AttendanceCalculator.calculateSummary(filteredDays)
+
+            val profileEntity = repository.getUserProfile()
+            val userProfile = profileEntity?.let {
+                UserProfile(
+                    name = it.name,
+                    designation = it.designation,
+                    department = it.department,
+                    employeeId = it.employeeId
+                )
+            }
+
+            val report = PeriodAttendanceReport(
+                period = period,
+                rangeTitle = rangeTitle,
+                startDate = effectiveStart,
+                endDate = effectiveEnd,
+                days = filteredDays,
+                summary = summary,
+                userProfile = userProfile
+            )
+
+            val result = AttendancePdfGenerator.generatePdf(context, report)
+            result.onSuccess { exportResult ->
+                _generatedPdfFile.value = exportResult.file
+                _exportedPdfResult.value = exportResult
+                try {
+                    context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                        exportResult.file.inputStream().use { inputStream ->
+                            inputStream.copyTo(outputStream)
+                        }
+                    }
+                    _messageEvent.emit("PDF saved successfully!")
+                    onSuccess?.invoke()
+                } catch (e: Exception) {
+                    _messageEvent.emit("Failed to save PDF to selected location: ${e.message}")
+                }
             }.onFailure { error ->
                 _messageEvent.emit("PDF generation failed: ${error.message}")
             }

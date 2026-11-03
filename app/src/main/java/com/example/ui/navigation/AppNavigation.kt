@@ -7,19 +7,25 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.ui.screens.AboutScreen
+import com.example.ui.screens.AttendancePeriodScreen
 import com.example.ui.screens.CurrentRecordScreen
+import com.example.ui.screens.EmployeeProfileScreen
 import com.example.ui.screens.HolidayManagementScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.LeaveManagementScreen
+import com.example.ui.screens.ManagementScreen
 import com.example.ui.screens.PreviousRecordsScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.viewmodel.OfficeHoursViewModel
 
 object AppDestinations {
     const val HOME = "home"
+    const val EMPLOYEE_INFO = "employee_info"
+    const val ATTENDANCE_PERIOD = "attendance_period"
+    const val SETTINGS = "settings"
     const val CURRENT_RECORD = "current_record"
     const val PREVIOUS_RECORDS = "previous_records"
-    const val SETTINGS = "settings"
+    const val MANAGEMENT = "management"
     const val HOLIDAYS = "holidays"
     const val LEAVES = "leaves"
     const val ABOUT = "about"
@@ -39,12 +45,37 @@ fun AppNavHost(
         composable(AppDestinations.HOME) {
             HomeScreen(
                 viewModel = viewModel,
-                onNavigateCurrentRecord = { navController.navigate(AppDestinations.CURRENT_RECORD) },
-                onNavigatePreviousRecords = { navController.navigate(AppDestinations.PREVIOUS_RECORDS) },
+                onNavigateEmployeeInfo = { navController.navigate(AppDestinations.EMPLOYEE_INFO) },
+                onNavigateAttendancePeriod = { navController.navigate(AppDestinations.ATTENDANCE_PERIOD) },
                 onNavigateSettings = { navController.navigate(AppDestinations.SETTINGS) },
-                onNavigateAbout = { navController.navigate(AppDestinations.ABOUT) },
+                onNavigateAttendanceRecords = { navController.navigate(AppDestinations.CURRENT_RECORD) },
+                onNavigateManagement = { navController.navigate(AppDestinations.MANAGEMENT) }
+            )
+        }
+
+        composable(AppDestinations.EMPLOYEE_INFO) {
+            EmployeeProfileScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(AppDestinations.ATTENDANCE_PERIOD) {
+            AttendancePeriodScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToRecords = { navController.navigate(AppDestinations.CURRENT_RECORD) }
+            )
+        }
+
+        composable(AppDestinations.MANAGEMENT) {
+            ManagementScreen(
+                onNavigateBack = { navController.popBackStack() },
                 onNavigateHolidays = { navController.navigate(AppDestinations.HOLIDAYS) },
-                onNavigateLeaves = { navController.navigate(AppDestinations.LEAVES) }
+                onNavigateLeaves = { navController.navigate(AppDestinations.LEAVES) },
+                onNavigateAttendancePeriod = { navController.navigate(AppDestinations.ATTENDANCE_PERIOD) },
+                onNavigateSettings = { navController.navigate(AppDestinations.SETTINGS) },
+                onNavigateAbout = { navController.navigate(AppDestinations.ABOUT) }
             )
         }
 
